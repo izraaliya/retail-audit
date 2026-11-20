@@ -34,15 +34,19 @@ STEPS = {
 }
 
 
+def rp(x) -> str:
+    return 'Rp ' + f'{int(x):,}'.replace(',', '.')
+
+
 def _key() -> str | None:
     return os.getenv("INSIGHT_API_KEY") or os.getenv("GEMINI_API_KEY")
 
 
 def _timeout() -> float:
     try:
-        return max(5.0, float(os.getenv("AGENT_TIMEOUT_SECONDS", "45")))
+        return max(5.0, float(os.getenv("AGENT_TIMEOUT_SECONDS", "35")))
     except ValueError:
-        return 45.0
+        return 35.0
 
 
 class Toolbox:
@@ -90,6 +94,23 @@ class Toolbox:
         self._note("cashier_profile", dict(cashier_id=cashier_id), "ok")
         return out
 
+    def cashier_breakdown(self, cashier_id: str, metric: str = "refund") -> list:
+        """Which products drive a cashier's numbers. metric is 'refund' (refund value by SKU), 'discount' (discount value by SKU) or 'void' (voided value by SKU). Returns the top 5 SKUs."""
+        t, cid = self.res["tables"], cashier_id.upper()
+        names = dict(zip(t["skus"].sku, t["skus"].name)) if "skus" in t else {}
+        out: list = []
+        o = t["orders"]
+        if metric == "refund" and "refunds" in t and "sku" in t["refunds"].columns:
+            g = t["refunds"][t["refunds"].cashier_id.str.upper() == cid].groupby("sku").amount.agg(["sum", "size"]).sort_values("sum", ascending=False).head(5)
+            out = [dict(sku=k, produk=names.get(k, k), nilai_rp=round(float(r["sum"])), jumlah=int(r["size"])) for k, r in g.iterrows()]
+        elif metric in ("discount", "void") and "items" in t:
+            mine = o[(o.cashier_id.str.upper() == cid) & ((o.discount > 0) if metric == "discount" else (o.voided == 1))]
+            it = t["items"][t["items"].order_id.isin(mine.order_id)].assign(v=lambda x: x.qty * x.unit_price)
+            g = it.groupby("sku").v.agg(["sum", "size"]).sort_values("sum", ascending=False).head(5)
+            out = [dict(sku=k, produk=names.get(k, k), nilai_rp=round(float(r["sum"])), jumlah=int(r["size"])) for k, r in g.iterrows()]
+        self._note("cashier_breakdown", dict(cashier_id=cashier_id, metric=metric), out)
+        return out
+
     def summary(self) -> dict:
         """Overall audit summary: counts by severity, total value at risk, and the highest-risk cashiers."""
         fs = self.res["findings"]
@@ -109,17 +130,45 @@ Aturan:
 Pertanyaan auditor: {q}"""
 
 
-def _model_answer(res: dict, q: str, tb: Toolbox) -> str:
+def _facts(res: dict, q: str, tb: Toolbox) -> dict:
+    """Run the obvious lookups up front (and log them), so the model usually needs a single round trip."""
+    ql = q.lower()
+    facts: dict = {"ringkasan": tb.summary()}
+    for fid in re.findall(r"\bf\d{3}\b", ql)[:2]:
+        facts[fid.upper()] = tb.get_finding(fid)
+    cids = re.findall(r"\bk\d{2}\b", ql) + [r.cashier_id for r in res["risk"].itertuples() if r.nama.lower() in ql]
+    for cid in list(dict.fromkeys(c.upper() for c in cids))[:2]:
+        facts["kasir_" + cid] = tb.cashier_profile(cid)
+        if any(w in ql for w in ("sku", "produk", "barang", "item")):
+            facts["produk_" + cid] = {m: tb.cashier_breakdown(cid, m) for m in ("refund", "discount", "void")}
+    if len(facts) == 1:
+        facts["temuan_tinggi"] = tb.list_findings(severity="Tinggi")[:8]
+    return facts
+
+
+def _gen(res: dict, q: str, tb: Toolbox, facts: dict, use_tools: bool, timeout: float) -> str:
+    import json
     from google import genai
     from google.genai import types
 
-    client = genai.Client(api_key=_key(), http_options=types.HttpOptions(timeout=int(_timeout() * 1000)))
-    r = client.models.generate_content(
-        model=os.getenv("INSIGHT_MODEL") or os.getenv("GEMINI_MODEL", DEFAULT_MODEL), contents=PROMPT.format(q=q),
-        config=types.GenerateContentConfig(tools=[tb.summary, tb.list_findings, tb.get_finding, tb.cashier_profile], temperature=0.2))
+    client = genai.Client(api_key=_key(), http_options=types.HttpOptions(timeout=int(timeout * 1000)))   # keep a reference so the client is not closed mid-request
+    cfg = types.GenerateContentConfig(temperature=0.2, tools=[tb.summary, tb.list_findings, tb.get_finding, tb.cashier_profile, tb.cashier_breakdown] if use_tools else None)
+    prompt = PROMPT.format(q=q) + "\n\nData yang sudah diambil:\n" + json.dumps(facts, ensure_ascii=False, default=str)[:12000]
+    if use_tools:
+        prompt += "\n\nPakai alat hanya bila data di atas belum cukup."
+    r = client.models.generate_content(model=os.getenv("INSIGHT_MODEL") or os.getenv("GEMINI_MODEL", DEFAULT_MODEL), contents=prompt, config=cfg)
     if not r.text:
         raise RuntimeError("empty answer")
     return r.text.strip()
+
+
+def _model_answer(res: dict, q: str, tb: Toolbox) -> str:
+    """Attempt 1 lets the model call tools; attempt 2 is a single plain call on the prefetched facts."""
+    facts = _facts(res, q, tb)
+    try:
+        return _pool.submit(_gen, res, q, tb, facts, True, _timeout()).result(timeout=_timeout() + 3)
+    except Exception:
+        return _pool.submit(_gen, res, q, tb, facts, False, _timeout()).result(timeout=_timeout() + 3)
 
 
 def _rule_answer(res: dict, q: str, tb: Toolbox) -> str:
@@ -136,6 +185,14 @@ def _rule_answer(res: dict, q: str, tb: Toolbox) -> str:
         p = tb.cashier_profile((cash or names)[0])
         if "error" in p:
             return "Kasir itu tidak ditemukan."
+        if any(w in ql for w in ("sku", "produk", "barang", "item")):
+            cid = p["profil"]["cashier_id"]
+            rules = p["profil"]["rules"]
+            metric = "refund" if "refund" in rules else "discount" if "diskon" in rules else "void" if "void" in rules else "refund"
+            top = tb.cashier_breakdown(cid, metric)
+            if top:
+                lab = {"refund": "refund", "discount": "diskon", "void": "void"}[metric]
+                return f"Produk dengan nilai {lab} terbesar untuk {p['profil']['nama']} ({cid}):\n" + "\n".join(f"- {t['produk']} ({t['sku']}): {rp(t['nilai_rp'])}, {t['jumlah']} baris" for t in top)
         pr = p["profil"]
         orders = f"{pr['orders']:,}".replace(",", ".")
         lines = [f"**{pr['nama']} ({pr['cashier_id']}), {pr['store']}**: skor risiko {pr['risk']} ({pr['level']}), {orders} order."]
@@ -162,12 +219,13 @@ def ask(res: dict, question: str) -> dict:
         return dict(answer="Tulis pertanyaannya dulu.", source="aturan", steps=[])
     if _key():
         try:
-            ans = _pool.submit(_model_answer, res, q, tb).result(timeout=_timeout() + 5)
+            ans = _pool.submit(_model_answer, res, q, tb).result(timeout=_timeout() * 2 + 10)
             return dict(answer=ans, source="asisten", steps=tb.log)
         except FutureTimeout:
-            note = "Asisten lengkap tidak merespons, memakai jawaban standar.\n\n"
-        except Exception:
-            note = "Asisten lengkap sedang tidak tersedia, memakai jawaban standar.\n\n"
+            note, why = "Asisten lengkap tidak merespons, memakai jawaban standar.", "TimeoutError"
+        except Exception as exc:
+            code = getattr(exc, "code", None) or getattr(getattr(exc, "response", None), "status_code", None)
+            note, why = "Asisten lengkap sedang tidak tersedia, memakai jawaban standar.", f"{type(exc).__name__}{' ' + str(code) if code else ''}"
         tb2 = Toolbox(res)
-        return dict(answer=note + _rule_answer(res, q, tb2), source="aturan", steps=tb2.log)
+        return dict(answer=f"{note} (penyebab teknis: {why})\n\n" + _rule_answer(res, q, tb2), source="aturan", steps=tb2.log)
     return dict(answer=_rule_answer(res, q, tb), source="aturan", steps=tb.log)

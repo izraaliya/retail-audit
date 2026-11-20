@@ -79,7 +79,7 @@ Docker: `docker compose up --build`. Updating: `git pull origin main`, then rest
 |----------|---------|-------------|
 | `INSIGHT_API_KEY` | none | Optional. Lets the assistant call tools and write free-form answers |
 | `INSIGHT_MODEL` | built-in default | Model for the assistant |
-| `AGENT_TIMEOUT_SECONDS` | `45` | Wait before falling back to rule answers |
+| `AGENT_TIMEOUT_SECONDS` | `35` | Tunggu per percobaan sebelum memakai jawaban standar. Data kasir/temuan diambil dulu, lalu model dipanggil dengan alat (5 alat termasuk `cashier_breakdown`); bila gagal, dicoba sekali lagi tanpa alat. Jika tetap gagal, jawaban standar tampil dengan "penyebab teknis". |
 
 ## API
 

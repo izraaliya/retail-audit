@@ -110,9 +110,9 @@ def test_assistant_failure_and_hang_fall_back(res, monkeypatch):
     monkeypatch.setattr(agent, "_model_answer", lambda *a: (_ for _ in ()).throw(RuntimeError("503")))
     a = agent.ask(res, "ringkas")
     assert a["source"] == "aturan" and "tidak tersedia" in a["answer"]
-    monkeypatch.setattr(agent, "_model_answer", lambda *a: time.sleep(30))
+    monkeypatch.setattr(agent, "_model_answer", lambda *a: time.sleep(40))
     t = time.time()
-    assert "tidak merespons" in agent.ask(res, "ringkas")["answer"] and time.time() - t < 15
+    assert "tidak merespons" in agent.ask(res, "ringkas")["answer"] and time.time() - t < 30
 
 
 def test_toolbox_unknown_ids(res):
@@ -172,3 +172,30 @@ def test_inspect_reports_tables_without_running_audit(tables):
     assert dup["ready"] is False and "orders" in dup["duplicates"]
     bad = client.post("/api/inspect", files=[("files", ("x.xls", b"zz", "application/vnd.ms-excel"))]).json()
     assert bad["files"][0]["error"]
+
+
+def test_breakdown_and_sku_question(res, monkeypatch):
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.delenv("INSIGHT_API_KEY", raising=False)
+    tb = agent.Toolbox(res)
+    top = tb.cashier_breakdown("K17", "refund")
+    assert top and top[0]["nilai_rp"] >= top[-1]["nilai_rp"] and set(top[0]) == {"sku", "produk", "nilai_rp", "jumlah"}
+    assert tb.cashier_breakdown("K05", "discount")
+    a = agent.ask(res, "wulan paling bahaya di SKU apa")
+    assert "Produk dengan nilai refund terbesar" in a["answer"] and a["steps"][-1]["tool"] == "cashier_breakdown"
+
+
+def test_model_path_prefetches_and_falls_back_to_plain_call(res, monkeypatch):
+    monkeypatch.setenv("INSIGHT_API_KEY", "fake")
+    calls = []
+
+    def fake_gen(res_, q, tb, facts, use_tools, timeout):
+        calls.append(use_tools)
+        if use_tools:
+            raise RuntimeError("tools call failed")
+        assert "kasir_K17" in facts
+        return "jawaban dari model"
+
+    monkeypatch.setattr(agent, "_gen", fake_gen)
+    a = agent.ask(res, "ceritakan Wulan")
+    assert a["answer"] == "jawaban dari model" and a["source"] == "asisten" and calls == [True, False]
