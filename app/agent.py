@@ -1,17 +1,23 @@
 """Audit assistant: an agent that investigates the findings with read-only tools and writes an evidence-based answer.
 
-With an API key it lets the model choose which tools to call (function calling) and logs every call. Without a key,
-or when the call fails, it answers from the same tools with fixed rules, so the page always works.
+When a local Ollama server is running, the model chooses which tools to call (function calling) and every call is logged.
+Without Ollama, or when the call fails, it answers from the same tools with fixed rules, so the page always works.
+Nothing leaves the machine: no cloud API and no key.
 """
 from __future__ import annotations
 
+import json
 import os
 import re
+import time
+import urllib.error
+import urllib.request
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 import pandas as pd
 
-DEFAULT_MODEL = "gemini-3.5-flash"
+DEFAULT_MODEL = "qwen2.5:7b"
+DEFAULT_HOST = "http://localhost:11434"
 _pool = ThreadPoolExecutor(max_workers=2)
 
 STEPS = {
@@ -38,15 +44,65 @@ def rp(x) -> str:
     return 'Rp ' + f'{int(x):,}'.replace(',', '.')
 
 
-def _key() -> str | None:
-    return os.getenv("INSIGHT_API_KEY") or os.getenv("GEMINI_API_KEY")
+def _host() -> str:
+    return (os.getenv("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/") if (os.getenv("OLLAMA_HOST") or DEFAULT_HOST).startswith("http") else "http://" + (os.getenv("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/")
+
+
+def _model() -> str:
+    return os.getenv("OLLAMA_MODEL") or DEFAULT_MODEL
 
 
 def _timeout() -> float:
     try:
-        return max(5.0, float(os.getenv("AGENT_TIMEOUT_SECONDS", "35")))
+        return max(5.0, float(os.getenv("AGENT_TIMEOUT_SECONDS", "90")))
     except ValueError:
-        return 35.0
+        return 90.0
+
+
+_probe: dict = {"t": 0.0, "ok": False}
+
+
+def enabled() -> bool:
+    """True when the Ollama server answers. Cached for 10 seconds so the page load stays quick."""
+    if os.getenv("ASSISTANT_MODE", "").lower() == "rules":
+        return False
+    if time.time() - _probe["t"] > 10:
+        try:
+            with urllib.request.urlopen(_host() + "/api/tags", timeout=1.5) as r:
+                _probe["ok"] = r.status == 200
+        except Exception:
+            _probe["ok"] = False
+        _probe["t"] = time.time()
+    return _probe["ok"]
+
+
+def _chat(messages: list, tools: list | None, timeout: float) -> dict:
+    body = {"model": _model(), "messages": messages, "stream": False, "options": {"temperature": 0.2, "num_ctx": 8192}}
+    if tools:
+        body["tools"] = tools
+    req = urllib.request.Request(_host() + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
+    try:
+        with urllib.request.urlopen(req, timeout=timeout) as r:
+            return json.loads(r.read())["message"]
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            raise RuntimeError(f"model '{_model()}' belum diunduh. Jalankan: ollama pull {_model()}") from None
+        raise RuntimeError(f"Ollama membalas HTTP {e.code}") from None
+    except urllib.error.URLError as e:
+        raise RuntimeError(f"Ollama tidak terjangkau di {_host()} ({e.reason})") from None
+
+
+def _schema(name: str, desc: str, props: dict, req: list | None = None) -> dict:
+    return {"type": "function", "function": {"name": name, "description": desc, "parameters": {"type": "object", "properties": props, "required": req or []}}}
+
+
+TOOLS = [
+    _schema("summary", "Ringkasan audit: jumlah temuan per tingkat, kasir berisiko tertinggi.", {}),
+    _schema("list_findings", "Daftar temuan, bisa disaring.", {"severity": {"type": "string", "description": "Tinggi, Sedang, atau Rendah"}, "cashier_id": {"type": "string"}, "rule": {"type": "string"}}),
+    _schema("get_finding", "Detail satu temuan beserta baris bukti.", {"finding_id": {"type": "string", "description": "contoh F003"}}, ["finding_id"]),
+    _schema("cashier_profile", "Profil risiko satu kasir.", {"cashier_id": {"type": "string", "description": "contoh K05"}}, ["cashier_id"]),
+    _schema("cashier_breakdown", "SKU/produk yang paling besar nilai refund, diskon, atau void seorang kasir.", {"cashier_id": {"type": "string"}, "metric": {"type": "string", "description": "refund, discount, atau void"}}, ["cashier_id"]),
+]
 
 
 class Toolbox:
@@ -147,19 +203,32 @@ def _facts(res: dict, q: str, tb: Toolbox) -> dict:
 
 
 def _gen(res: dict, q: str, tb: Toolbox, facts: dict, use_tools: bool, timeout: float) -> str:
-    import json
-    from google import genai
-    from google.genai import types
-
-    client = genai.Client(api_key=_key(), http_options=types.HttpOptions(timeout=int(timeout * 1000)))   # keep a reference so the client is not closed mid-request
-    cfg = types.GenerateContentConfig(temperature=0.2, tools=[tb.summary, tb.list_findings, tb.get_finding, tb.cashier_profile, tb.cashier_breakdown] if use_tools else None)
-    prompt = PROMPT.format(q=q) + "\n\nData yang sudah diambil:\n" + json.dumps(facts, ensure_ascii=False, default=str)[:12000]
+    """One question to the local model. With use_tools the model may call the toolbox for up to 3 rounds."""
+    prompt = PROMPT.format(q=q) + "\n\nData yang sudah diambil:\n" + json.dumps(facts, ensure_ascii=False, default=str)[:9000]
     if use_tools:
         prompt += "\n\nPakai alat hanya bila data di atas belum cukup."
-    r = client.models.generate_content(model=os.getenv("INSIGHT_MODEL") or os.getenv("GEMINI_MODEL", DEFAULT_MODEL), contents=prompt, config=cfg)
-    if not r.text:
-        raise RuntimeError("empty answer")
-    return r.text.strip()
+    msgs: list = [{"role": "user", "content": prompt}]
+    allowed = {"summary", "list_findings", "get_finding", "cashier_profile", "cashier_breakdown"}
+    for _ in range(3 if use_tools else 0):
+        m = _chat(msgs, TOOLS, timeout)
+        calls = m.get("tool_calls") or []
+        if not calls:
+            if (m.get("content") or "").strip():
+                return m["content"].strip()
+            break
+        msgs.append(m)
+        for c in calls:
+            fn = c.get("function", {})
+            name, args = fn.get("name", ""), fn.get("arguments") or {}
+            try:
+                out = getattr(tb, name)(**args) if name in allowed and isinstance(args, dict) else {"error": f"alat '{name}' tidak ada"}
+            except TypeError as e:
+                out = {"error": str(e)}
+            msgs.append({"role": "tool", "content": json.dumps(out, ensure_ascii=False, default=str)[:6000]})
+    m = _chat(msgs, None, timeout)
+    if not (m.get("content") or "").strip():
+        raise RuntimeError("model memberi jawaban kosong")
+    return m["content"].strip()
 
 
 def _model_answer(res: dict, q: str, tb: Toolbox) -> str:
@@ -217,15 +286,14 @@ def ask(res: dict, question: str) -> dict:
     q = (question or "").strip()[:600]
     if not q:
         return dict(answer="Tulis pertanyaannya dulu.", source="aturan", steps=[])
-    if _key():
+    if enabled():
         try:
             ans = _pool.submit(_model_answer, res, q, tb).result(timeout=_timeout() * 2 + 10)
             return dict(answer=ans, source="asisten", steps=tb.log)
         except FutureTimeout:
-            note, why = "Asisten lengkap tidak merespons, memakai jawaban standar.", "TimeoutError"
+            note, why = "Asisten lengkap tidak merespons, memakai jawaban standar.", "TimeoutError (model lokal lambat; naikkan AGENT_TIMEOUT_SECONDS atau pakai model lebih kecil)"
         except Exception as exc:
-            code = getattr(exc, "code", None) or getattr(getattr(exc, "response", None), "status_code", None)
-            note, why = "Asisten lengkap sedang tidak tersedia, memakai jawaban standar.", f"{type(exc).__name__}{' ' + str(code) if code else ''}"
+            note, why = "Asisten lengkap sedang tidak tersedia, memakai jawaban standar.", f"{type(exc).__name__}: {str(exc)[:160]}"
         tb2 = Toolbox(res)
         return dict(answer=f"{note} (penyebab teknis: {why})\n\n" + _rule_answer(res, q, tb2), source="aturan", steps=tb2.log)
     return dict(answer=_rule_answer(res, q, tb), source="aturan", steps=tb.log)

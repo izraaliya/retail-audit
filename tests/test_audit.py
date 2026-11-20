@@ -95,8 +95,7 @@ def test_errors():
 
 
 def test_assistant_fallback_answers(res, monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("INSIGHT_API_KEY", raising=False)
+    monkeypatch.setattr(agent, "enabled", lambda: False)
     a = agent.ask(res, "jelaskan F001")
     assert a["source"] == "aturan" and "F001" in a["answer"] and a["steps"][0]["tool"] == "get_finding"
     assert "K05" in agent.ask(res, "ceritakan K05")["answer"]
@@ -105,7 +104,7 @@ def test_assistant_fallback_answers(res, monkeypatch):
 
 
 def test_assistant_failure_and_hang_fall_back(res, monkeypatch):
-    monkeypatch.setenv("INSIGHT_API_KEY", "fake")
+    monkeypatch.setattr(agent, "enabled", lambda: True)
     monkeypatch.setenv("AGENT_TIMEOUT_SECONDS", "5")
     monkeypatch.setattr(agent, "_model_answer", lambda *a: (_ for _ in ()).throw(RuntimeError("503")))
     a = agent.ask(res, "ringkas")
@@ -175,8 +174,7 @@ def test_inspect_reports_tables_without_running_audit(tables):
 
 
 def test_breakdown_and_sku_question(res, monkeypatch):
-    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
-    monkeypatch.delenv("INSIGHT_API_KEY", raising=False)
+    monkeypatch.setattr(agent, "enabled", lambda: False)
     tb = agent.Toolbox(res)
     top = tb.cashier_breakdown("K17", "refund")
     assert top and top[0]["nilai_rp"] >= top[-1]["nilai_rp"] and set(top[0]) == {"sku", "produk", "nilai_rp", "jumlah"}
@@ -186,7 +184,7 @@ def test_breakdown_and_sku_question(res, monkeypatch):
 
 
 def test_model_path_prefetches_and_falls_back_to_plain_call(res, monkeypatch):
-    monkeypatch.setenv("INSIGHT_API_KEY", "fake")
+    monkeypatch.setattr(agent, "enabled", lambda: True)
     calls = []
 
     def fake_gen(res_, q, tb, facts, use_tools, timeout):
@@ -199,3 +197,29 @@ def test_model_path_prefetches_and_falls_back_to_plain_call(res, monkeypatch):
     monkeypatch.setattr(agent, "_gen", fake_gen)
     a = agent.ask(res, "ceritakan Wulan")
     assert a["answer"] == "jawaban dari model" and a["source"] == "asisten" and calls == [True, False]
+
+
+def test_ollama_tool_loop_and_errors(res, monkeypatch):
+    tb = agent.Toolbox(res)
+    seq = [
+        {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "cashier_breakdown", "arguments": {"cashier_id": "K17", "metric": "refund"}}}]},
+        {"role": "assistant", "content": "Wulan: SKU teratas sudah dicek."},
+    ]
+    sent = []
+    monkeypatch.setattr(agent, "_chat", lambda msgs, tools, timeout: (sent.append(len(msgs)), seq.pop(0))[1])
+    out = agent._gen(res, "wulan di sku apa", tb, {"x": 1}, True, 5)
+    assert out.startswith("Wulan") and sent == [1, 3] and tb.log[-1]["tool"] == "cashier_breakdown"
+    monkeypatch.setattr(agent, "_chat", lambda *a: {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "hapus_semua", "arguments": {}}}]})
+    monkeypatch.setattr(agent, "_chat", lambda msgs, tools, timeout: {"role": "assistant", "content": "ok"} if tools is None else {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "hapus_semua", "arguments": {}}}]})
+    assert agent._gen(res, "x", tb, {}, True, 5) == "ok"
+
+
+def test_ollama_down_reports_cause(res, monkeypatch):
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+    monkeypatch.setattr(agent, "enabled", lambda: True)
+    a = agent.ask(res, "ringkas")
+    assert a["source"] == "aturan" and "penyebab teknis" in a["answer"] and "Ollama tidak terjangkau" in a["answer"]
+    monkeypatch.undo()
+    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:1")
+    agent._probe["t"] = 0
+    assert agent.enabled() is False

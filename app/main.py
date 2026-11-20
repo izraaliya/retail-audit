@@ -78,7 +78,7 @@ def _payload(res: dict, job_id: str, detected: dict) -> dict:
         "kpi": {"orders": res["meta"]["n_orders"], "findings": len(fs), "severity": {s: sum(1 for f in fs if f["severity"] == s) for s in ("Tinggi", "Sedang", "Rendah")},
                 "amount": round(sum(f["amount"] for f in fs)), "high_risk_cashiers": int((res["risk"].level == "Tinggi").sum())},
         "risk": _records(res["risk"]), "peers": _records(res["peers"]), "findings": slim,
-        "assistant": {"enabled": bool(agent._key())},
+        "assistant": {"enabled": agent.enabled()},
     }
 
 
