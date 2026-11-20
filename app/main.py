@@ -135,6 +135,47 @@ def analyze_sample(discount_limit: float = Form(20.0)):
     return JSONResponse(_run(tables, detected, discount_limit))
 
 
+def _peek(filename: str, data: bytes) -> dict:
+    """Cheap look at an upload: which sheets it has, and which table type each one is (headers only)."""
+    name = filename.lower()
+    out = {"file": filename, "size": len(data), "sheets": [], "error": ""}
+    if len(data) > MAX_BYTES:
+        out["error"] = f"Lebih dari {MAX_BYTES // 1024 // 1024} MB."
+    elif name.endswith((".xlsx", ".xlsm")):
+        try:
+            from openpyxl import load_workbook
+            wb = load_workbook(io.BytesIO(data), read_only=True, data_only=True)
+            for ws in wb.worksheets:
+                head = next(ws.iter_rows(min_row=1, max_row=1, values_only=True), ())
+                cols = pd.DataFrame(columns=[str(c).strip().lower() for c in head if c is not None])
+                n = max(0, (ws.max_row or 1) - 1)
+                out["sheets"].append({"name": ws.title, "kind": detect_kind(cols), "rows": n})
+        except Exception:
+            out["error"] = "File Excel tidak bisa dibaca."
+    elif name.endswith(".xls"):
+        out["error"] = "Format .xls lama tidak didukung. Simpan ulang sebagai .xlsx."
+    else:
+        try:
+            df = pd.read_csv(io.BytesIO(data), sep=None, engine="python", encoding_errors="replace")
+            df.columns = [str(c).strip().lower() for c in df.columns]
+            out["sheets"].append({"name": filename, "kind": detect_kind(df), "rows": int(len(df))})
+        except Exception:
+            out["error"] = "Tidak bisa dibaca sebagai CSV."
+    return out
+
+
+@app.post("/api/inspect")
+async def inspect(files: list[UploadFile] = File(...)):
+    res = [_peek(f.filename or "file", await f.read()) for f in files]
+    kinds: dict[str, list[str]] = {}
+    for r in res:
+        for sh in r["sheets"]:
+            if sh["kind"]:
+                kinds.setdefault(sh["kind"], []).append(f"{r['file']} › {sh['name']}")
+    return {"files": res, "found": {k: v[0] for k, v in kinds.items()}, "duplicates": {k: v for k, v in kinds.items() if len(v) > 1},
+            "ready": "orders" in kinds and not any(len(v) > 1 for v in kinds.values())}
+
+
 class Ask(BaseModel):
     job_id: str
     question: str

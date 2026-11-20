@@ -158,3 +158,17 @@ def test_bad_uploads(tables):
     assert r.status_code == 422 and "dua sumber" in r.json()["detail"].lower()
     assert client.post("/api/analyze/sample", data={"discount_limit": "1"}).status_code == 422
     assert client.post("/api/analyze", files=[("files", ("c.csv", tables["refunds"].to_csv(index=False).encode(), "text/csv"))]).status_code == 422
+
+
+def test_inspect_reports_tables_without_running_audit(tables):
+    r = client.post("/api/inspect", files=[("files", ("Data_Master.xlsx", (S / "Data_Master.xlsx").read_bytes(), "application/octet-stream"))])
+    d = r.json()
+    assert r.status_code == 200 and set(d["found"]) == {"employees", "stores", "skus", "opname"} and d["ready"] is False
+    both = client.post("/api/inspect", files=[("files", ("Data_Order_Lengkap.xlsx", (S / "Data_Order_Lengkap.xlsx").read_bytes(), "application/octet-stream")),
+                                              ("files", ("Data_Master.xlsx", (S / "Data_Master.xlsx").read_bytes(), "application/octet-stream"))]).json()
+    assert both["ready"] is True and len(both["found"]) == 8 and both["duplicates"] == {}
+    csv = tables["orders"].head(5).to_csv(index=False).encode()
+    dup = client.post("/api/inspect", files=[("files", ("a.csv", csv, "text/csv")), ("files", ("b.csv", csv, "text/csv"))]).json()
+    assert dup["ready"] is False and "orders" in dup["duplicates"]
+    bad = client.post("/api/inspect", files=[("files", ("x.xls", b"zz", "application/vnd.ms-excel"))]).json()
+    assert bad["files"][0]["error"]

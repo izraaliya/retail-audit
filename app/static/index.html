@@ -35,9 +35,23 @@
   .small { color:var(--muted); font-size:15px; } .label { font:500 12px var(--mono); color:var(--muted); letter-spacing:.04em; }
   .sheet { background:var(--panel); border:1px solid var(--line); border-radius:3px; box-shadow:0 1px 0 #fff inset, 0 10px 24px -18px rgba(12,42,46,.5); }
 
-  .intake { display:grid; grid-template-columns:1.5fr 1fr; } .intake > div { padding:26px; } .intake > div + div { border-left:1px dashed var(--line); }
-  .drop { border:1.5px solid var(--ink); border-radius:2px; padding:30px 20px; text-align:center; cursor:pointer; background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(12,42,46,.04) 10px 11px); }
-  .drop:hover,.drop.over { background:#E7EEF0; } .drop b { font-weight:600; }
+  .intake { display:grid; grid-template-columns:1.15fr 1fr; } .intake > div { padding:26px; } .intake > div + div { border-left:1px dashed var(--line); }
+  .step { font:500 12px var(--mono); letter-spacing:.06em; color:var(--muted); margin:0 0 10px; display:flex; gap:10px; align-items:center; } .step i { font-style:normal; background:var(--ink); color:#fff; width:20px; height:20px; border-radius:50%; display:grid; place-items:center; font-size:11px; }
+  .drop { border:2px dashed var(--ink); border-radius:3px; padding:34px 22px 28px; text-align:center; cursor:pointer; background:#fff; transition:background .15s; }
+  .drop:hover,.drop.over { background:#EAF1F2; border-style:solid; } .drop b { font-weight:600; font-size:19px; display:block; margin-top:10px; }
+  .drop .ico { display:block; margin:0 auto; } .drop .small { display:block; margin-top:4px; }
+  .slips { display:grid; gap:8px; margin-top:14px; }
+  .slip { border:1px solid var(--ink); background:#fff; padding:9px 12px 9px 14px; border-left-width:6px; display:grid; grid-template-columns:1fr auto; gap:2px 12px; align-items:start; }
+  .slip.bad { border-left-color:var(--stamp); } .slip.good { border-left-color:var(--ok); }
+  .slip .fn { font:500 13px var(--mono); word-break:break-all; } .slip .meta { font-size:14px; color:var(--muted); grid-column:1; } .slip .meta em { font-style:normal; color:var(--ink); }
+  .slip button { all:unset; cursor:pointer; grid-column:2; grid-row:1; width:24px; height:24px; text-align:center; line-height:24px; } .slip button:hover { background:#E3EAEC; }
+  .check { list-style:none; margin:0; padding:0; border-top:1px solid var(--line); }
+  .check li { display:grid; grid-template-columns:24px 1fr; gap:10px; padding:9px 0; border-bottom:1px solid var(--line); align-items:start; }
+  .check .bx { width:20px; height:20px; border:2px solid var(--ink); border-radius:2px; display:grid; place-items:center; margin-top:2px; background:#fff; } .check .bx svg { display:none; }
+  .check li.got .bx { background:var(--ink); } .check li.got .bx svg { display:block; } .check li.dup .bx { border-color:var(--stamp); background:#FBE6E1; }
+  .check b { font-weight:600; } .check .req { font:500 11px var(--mono); color:var(--stamp); margin-left:8px; letter-spacing:.05em; } .check .unl { display:block; font-size:14px; color:var(--muted); line-height:1.35; }
+  .check li.got .unl { color:#2B4448; } .check li:not(.got) b { color:#3E565A; }
+  .ready { margin:14px 0 0; font-size:15px; padding:8px 12px; border-left:4px solid var(--line); background:#fff; } .ready.ok { border-left-color:var(--ok); } .ready.no { border-left-color:var(--stamp); }
   .files { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
   .file { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--ink); padding:3px 4px 3px 10px; font:400 12.5px var(--mono); background:#fff; }
   .file button { all:unset; cursor:pointer; width:22px; height:22px; text-align:center; line-height:22px; } .file button:hover { background:#E3EAEC; }
@@ -132,14 +146,22 @@
     <p class="lede">Masukkan data penjualan, refund, kas, dan stok. Setiap kasir ditimbang terhadap rekan sejawatnya. Yang melenceng dibuatkan berkas, lengkap dengan baris data yang menjadi dasarnya.</p>
     <div class="sheet intake">
       <div>
-        <div id="drop" class="drop" tabindex="0" role="button" aria-label="Pilih file Excel atau CSV"><b>Letakkan file di sini</b> atau klik untuk memilih.<br><span class="small">Excel atau CSV. Dua file cukup: Data Order Lengkap dan Data Master.</span>
+        <p class="step"><i>1</i>MASUKKAN BERKAS</p>
+        <div id="drop" class="drop" tabindex="0" role="button" aria-label="Pilih file Excel atau CSV">
+          <svg class="ico" width="44" height="44" viewBox="0 0 44 44" fill="none" aria-hidden="true"><path d="M9 6h18l8 8v24H9z" fill="#fff" stroke="#0C2A2E" stroke-width="2"/><path d="M27 6v8h8" stroke="#0C2A2E" stroke-width="2"/><path d="M22 32V21m-5 4 5-5 5 5" stroke="#D9432A" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <b>Letakkan file di sini</b><span class="small">atau klik untuk memilih. Excel atau CSV, boleh beberapa sekaligus.</span>
           <input id="file" type="file" accept=".xlsx,.xlsm,.csv" multiple class="hidden"></div>
-        <div id="chips" class="files"></div>
+        <div id="chips" class="slips"></div>
         <div id="error" class="err hidden" role="alert"></div>
       </div>
       <div class="opts">
+        <p class="step"><i>2</i>KELENGKAPAN DATA</p>
+        <ul class="check" id="check" aria-live="polite"></ul>
+        <div class="ready no" id="ready">Belum ada berkas. Data Order wajib ada.</div>
+        <p class="step" style="margin-top:22px"><i>3</i>ATURAN DAN JALANKAN</p>
         <label>Diskon di atas berapa persen wajib disetujui atasan?<input id="limit" type="number" value="20" min="5" max="90"></label>
         <div class="btns"><button id="go" class="btn">Mulai periksa</button><button id="sample" class="btn alt" type="button">Pakai data contoh</button></div>
+        <div id="loading" class="loading hidden" aria-live="polite"><i></i><i></i><i></i>Membaca transaksi satu per satu…</div>
       </div>
     </div>
     <details class="fmt"><summary>Kolom apa yang harus ada?</summary>
@@ -147,7 +169,6 @@
       <p id="samples" class="small"></p>
       <div class="tw"><table class="fmt"><thead><tr><th>Data</th><th>Wajib?</th><th>Kolom</th><th>Di contoh</th></tr></thead><tbody id="fmt"></tbody></table></div>
     </details>
-    <div id="loading" class="loading hidden" aria-live="polite"><i></i><i></i><i></i>Membaca transaksi satu per satu…</div>
   </section>
 
   <section class="view hidden" id="v-memo">
@@ -217,8 +238,44 @@ drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefau
 ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => addFiles(e.dataTransfer.files));
 input.onchange = () => { addFiles(input.files); input.value = ""; };
+const UNLOCK = {orders: "Dasar semua pemeriksaan: diskon, void, jam transaksi, kasir vs rekan, total tidak cocok", items: "Struk kembar dan subtotal tidak cocok dengan isi struk",
+  refunds: "Refund berlebihan, tanpa order, disetujui sendiri, terlambat", cash: "Selisih kas pada penutupan", employees: "Nama kasir di laporan (bukan sekadar kode)",
+  stores: "Transaksi di luar jam buka dan nama toko", skus: "Harga pokok untuk nilai susut stok", opname: "Susut stok per toko dan produk"};
+const KORDER = ["orders", "items", "refunds", "cash", "employees", "stores", "skus", "opname"];
+let SCHEMA = null, INSP = null, seq = 0;
 function addFiles(l) { for (const f of l) if (!files.some(x => x.name === f.name && x.size === f.size)) files.push(f); chips(); }
-function chips() { $("chips").replaceChildren(...files.map((f, i) => el("span", {class: "file"}, f.name, (() => { const b = el("button", {type: "button", "aria-label": "Hapus " + f.name, text: "✕"}); b.onclick = () => { files.splice(i, 1); chips(); }; return b; })()))); }
+async function inspectFiles() {
+  const my = ++seq;
+  if (!files.length) { INSP = null; return paint(); }
+  const fd = new FormData(); files.forEach(f => fd.append("files", f));
+  try { const r = await fetch("/api/inspect", {method: "POST", body: fd}); const d = await r.json(); if (my === seq && r.ok) INSP = d; } catch (e) { INSP = null; }
+  if (my === seq) paint();
+}
+function chips() { paint(); inspectFiles(); }
+const TICK = '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const KL = {orders: "Order", items: "Item order", refunds: "Refund", cash: "Setoran kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Stok opname"};
+function paint() {
+  const found = INSP ? INSP.found : {}, dup = INSP ? INSP.duplicates : {};
+  $("chips").replaceChildren(...files.map((f, i) => {
+    const info = INSP && INSP.files.find(x => x.file === f.name);
+    const ok = info && !info.error && info.sheets.some(s => s.kind);
+    const meta = !INSP ? "Membaca…" : !info ? "" : info.error ? info.error : ok ? "" : "Kolomnya tidak cocok dengan data apa pun. Lihat daftar kolom di bawah.";
+    const bx = el("div", {class: "meta"}, meta);
+    if (info && ok) bx.append(...info.sheets.filter(s => s.kind).map(s => el("span", {}, el("em", {text: KL[s.kind]}), " (" + fmt(s.rows) + " baris)  ")), ...info.sheets.filter(s => !s.kind).length ? [el("span", {text: "· " + info.sheets.filter(s => !s.kind).length + " sheet dilewati"})] : []);
+    const rm = el("button", {type: "button", "aria-label": "Hapus " + f.name, text: "✕"}); rm.onclick = () => { files.splice(i, 1); chips(); };
+    return el("div", {class: "slip " + (info ? (ok ? "good" : "bad") : "")}, el("div", {class: "fn", text: f.name}), rm, bx);
+  }));
+  const ul = $("check"); if (!SCHEMA) return;
+  ul.replaceChildren(...KORDER.map(k => { const got = !!found[k], isd = !!dup[k], req = k === "orders";
+    const li = el("li", {class: (got ? "got " : "") + (isd ? "dup" : "")}, el("span", {class: "bx", "aria-hidden": "true"}), el("div", {}, el("b", {text: KL[k]}), req ? el("span", {class: "req", text: "WAJIB"}) : null, el("span", {class: "unl", text: isd ? "Ada dua sumber, sisakan satu: " + dup[k].join(" dan ") : (got ? found[k] + ". " : "") + UNLOCK[k]})));
+    li.querySelector(".bx").innerHTML = TICK; return li; }));
+  const r = $("ready"), n = Object.keys(found).length;
+  if (!files.length) { r.className = "ready no"; r.textContent = "Belum ada berkas. Data Order wajib ada."; }
+  else if (!INSP) { r.className = "ready"; r.textContent = "Membaca berkas…"; }
+  else if (Object.keys(dup).length) { r.className = "ready no"; r.textContent = "Ada tabel ganda. Hapus salah satu berkas."; }
+  else if (!found.orders) { r.className = "ready no"; r.textContent = "Data Order belum ada, jadi pemeriksaan belum bisa jalan."; }
+  else { r.className = "ready ok"; r.textContent = n + " dari " + KORDER.length + " tabel terbaca." + (n < KORDER.length ? " Tambah tabel lain untuk membuka pemeriksaan tambahan." : " Semua pemeriksaan akan berjalan."); }
+}
 function showError(m) { const e = $("error"); e.textContent = m || ""; e.classList.toggle("hidden", !m); }
 
 async function run(url, fd) {
@@ -361,6 +418,7 @@ async function ask_() {
 $("askBtn").onclick = ask_; $("q").onkeydown = e => { if (e.key === "Enter") ask_(); }; $("outX").onclick = () => $("out").classList.add("hidden");
 
 fetch("/api/schema").then(r => r.json()).then(sc => {
+  SCHEMA = sc; paint();
   $("samples").replaceChildren("Contoh untuk diunduh: ", ...sc.sample_files.flatMap((n, i) => [i ? " dan " : "", el("a", {href: "/sample/" + n, text: n})]));
   $("fmt").replaceChildren(...sc.files.map(f => el("tr", {}, el("td", {text: f.label}), el("td", {text: f.required ? "Wajib" : "Opsional"}), el("td", {}, ...f.columns.map(c => el("code", {text: c}))), el("td", {text: f.sample}))));
 }).catch(() => {});
