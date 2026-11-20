@@ -7,204 +7,191 @@
 <link rel="icon" href="data:,">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,600&display=swap" rel="stylesheet">
 <style>
-  :root { --bg:#F5F6F8; --ink:#111216; --panel:#fff; --line:#E0E3E9; --muted:#5E6573; --hl:#FFE14D;
-          --red:#D12F2F; --amber:#D98A00; --blue:#3B6FD1; --ok:#2F8F5B;
-          --sans:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif; --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace; }
+  :root { --bg:#DCE3E6; --panel:#F6F8F8; --ink:#0C2A2E; --muted:#4D6367; --line:#B9C6C9; --stamp:#D9432A; --amber:#B87A0E; --slate:#4A7886; --ok:#2B7A68;
+          --serif:"Newsreader",Georgia,"Times New Roman",serif; --mono:"DM Mono",ui-monospace,Menlo,Consolas,monospace; }
   * { box-sizing:border-box; }
-  html { scroll-behavior:smooth; scroll-padding-top:76px; }
-  body { margin:0; background:var(--bg); color:var(--ink); font:400 15px/1.55 var(--sans); }
-  :focus-visible { outline:3px solid var(--blue); outline-offset:2px; border-radius:3px; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:400 17px/1.6 var(--serif); padding-bottom:96px; }
+  :focus-visible { outline:3px solid var(--stamp); outline-offset:2px; border-radius:2px; }
   .hidden { display:none !important; }
   .mono { font-family:var(--mono); }
+  .wrap { max-width:1100px; margin:0 auto; padding:0 28px; }
 
-  .shell { display:grid; grid-template-columns:232px 1fr; min-height:100vh; }
-  aside.side { background:var(--ink); color:#E8EAEE; position:sticky; top:0; height:100vh; padding:22px 14px; display:flex; flex-direction:column; gap:22px; }
-  .brand { display:flex; align-items:center; gap:10px; font:600 17px var(--sans); padding:0 8px; letter-spacing:-.01em; }
-  .mark { width:26px; height:26px; background:var(--hl); border-radius:5px; display:grid; place-items:center; }
-  nav.nav { display:grid; gap:2px; }
-  nav.nav a { color:#B9BFCB; text-decoration:none; padding:9px 10px; border-radius:6px; font-size:14.5px; display:flex; justify-content:space-between; align-items:center; }
-  nav.nav a:hover { background:#1E2026; color:#fff; }
-  nav.nav a.on { background:var(--hl); color:var(--ink); font-weight:600; }
-  nav.nav a[aria-disabled="true"] { opacity:.38; pointer-events:none; }
-  nav.nav small { font:500 12px var(--mono); }
-  .side .foot { margin-top:auto; font-size:12.5px; color:#8A91A0; line-height:1.5; padding:0 8px; }
-  a.dl { display:block; text-align:center; background:var(--hl); color:var(--ink); font-weight:600; text-decoration:none; padding:10px 12px; border-radius:6px; margin-bottom:12px; font-size:14px; }
-  a.dl[aria-disabled="true"] { background:#2A2D35; color:#6E7585; pointer-events:none; }
+  .topbar { background:var(--ink); color:#E6EEEE; }
+  .topbar .wrap { display:flex; align-items:center; gap:34px; height:60px; }
+  .word { font:italic 600 24px var(--serif); letter-spacing:-.01em; } .word span { font-style:normal; font-family:var(--mono); font-size:11px; letter-spacing:.08em; color:#9DB3B5; margin-left:8px; }
+  .tabs { display:flex; gap:4px; height:100%; align-items:stretch; }
+  .tabs button { all:unset; cursor:pointer; padding:0 16px; display:flex; align-items:center; font:500 15px var(--serif); color:#A9BFC1; border-bottom:3px solid transparent; }
+  .tabs button:hover { color:#fff; } .tabs button.on { color:#fff; border-bottom-color:var(--stamp); }
+  .tabs button:disabled { opacity:.35; cursor:default; } .tabs button:focus-visible { outline:3px solid var(--stamp); outline-offset:-3px; }
+  .tabs sup { font:500 11px var(--mono); margin-left:6px; color:#F2A596; }
+  .topbar a.dl { margin-left:auto; color:#0C2A2E; background:#E6EEEE; font:500 14px var(--serif); text-decoration:none; padding:7px 14px; border-radius:2px; } .topbar a.dl[aria-disabled="true"] { opacity:.35; pointer-events:none; }
 
-  main.main { padding:0 36px 80px; min-width:0; }
-  .top { position:sticky; top:0; z-index:5; background:rgba(245,246,248,.92); backdrop-filter:blur(6px); display:flex; justify-content:space-between; align-items:center; padding:14px 0; border-bottom:1px solid var(--line); margin-bottom:8px; }
-  .top .crumb { font:500 13px var(--mono); color:var(--muted); }
-  .btn { border-radius:6px; padding:9px 16px; font:600 14.5px var(--sans); cursor:pointer; border:1.5px solid var(--ink); background:var(--ink); color:#fff; }
-  .btn:hover { background:#272A33; } .btn.alt { background:transparent; color:var(--ink); } .btn.alt:hover { background:#E9EBF0; }
-  .btn.hl { background:var(--hl); color:var(--ink); border-color:var(--ink); } .btn.hl:hover { background:#FFD91F; }
-  button:disabled { opacity:.5; cursor:progress; }
+  .view { padding:46px 0 20px; }
+  h1 { font:600 clamp(34px,4.6vw,52px)/1.08 var(--serif); letter-spacing:-.02em; margin:0 0 14px; max-width:20ch; }
+  h2 { font:600 28px/1.15 var(--serif); letter-spacing:-.01em; margin:0 0 6px; } h3 { font:600 18px var(--serif); margin:22px 0 6px; }
+  .lede { font-size:19px; color:#2B4448; max-width:58ch; margin:0 0 26px; }
+  .small { color:var(--muted); font-size:15px; } .label { font:500 12px var(--mono); color:var(--muted); letter-spacing:.04em; }
+  .sheet { background:var(--panel); border:1px solid var(--line); border-radius:3px; box-shadow:0 1px 0 #fff inset, 0 10px 24px -18px rgba(12,42,46,.5); }
 
-  section.sec { padding:34px 0 6px; }
-  h1 { font:700 clamp(28px,3.4vw,40px)/1.1 var(--sans); letter-spacing:-.03em; margin:0 0 10px; max-width:22ch; }
-  h2 { font:700 22px/1.2 var(--sans); letter-spacing:-.02em; margin:0 0 4px; }
-  h3 { font:600 15px var(--sans); margin:18px 0 6px; }
-  .sub { color:var(--muted); margin:0 0 18px; max-width:70ch; }
-  .hint { color:var(--muted); font-size:13.5px; margin:6px 0 12px; }
-  mark.hl { background:linear-gradient(transparent 55%, var(--hl) 55%); color:inherit; padding:0 2px; }
-
-  .panel { background:var(--panel); border:1px solid var(--line); border-radius:10px; }
-  .intake { display:grid; grid-template-columns:1.6fr 1fr; gap:0; }
-  .intake > div { padding:22px; } .intake > div + div { border-left:1px solid var(--line); }
-  .drop { border:1.5px dashed #AEB5C2; border-radius:8px; padding:30px 18px; text-align:center; color:var(--muted); cursor:pointer; }
-  .drop:hover,.drop.over { background:#FFFBE0; border-color:var(--ink); } .drop b { color:var(--ink); }
+  .intake { display:grid; grid-template-columns:1.5fr 1fr; } .intake > div { padding:26px; } .intake > div + div { border-left:1px dashed var(--line); }
+  .drop { border:1.5px solid var(--ink); border-radius:2px; padding:30px 20px; text-align:center; cursor:pointer; background:repeating-linear-gradient(135deg,transparent 0 10px,rgba(12,42,46,.04) 10px 11px); }
+  .drop:hover,.drop.over { background:#E7EEF0; } .drop b { font-weight:600; }
   .files { display:flex; flex-wrap:wrap; gap:8px; margin-top:12px; }
-  .file { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--line); border-radius:6px; padding:4px 5px 4px 10px; font:500 13px var(--mono); background:#fff; }
-  .file button { all:unset; cursor:pointer; width:22px; height:22px; text-align:center; line-height:22px; color:var(--muted); border-radius:4px; } .file button:hover { background:#EEF0F4; }
-  .opts label { display:block; font-size:13.5px; color:var(--muted); margin-bottom:14px; }
-  .opts input { display:block; width:100%; margin-top:5px; border:1px solid var(--line); border-radius:6px; padding:9px 11px; font:500 15px var(--mono); }
+  .file { display:inline-flex; align-items:center; gap:8px; border:1px solid var(--ink); padding:3px 4px 3px 10px; font:400 12.5px var(--mono); background:#fff; }
+  .file button { all:unset; cursor:pointer; width:22px; height:22px; text-align:center; line-height:22px; } .file button:hover { background:#E3EAEC; }
+  .opts label { display:block; font-size:15px; color:var(--muted); margin-bottom:14px; }
+  .opts input { display:block; width:100%; margin-top:4px; border:1px solid var(--ink); border-radius:2px; padding:9px 11px; font:500 16px var(--mono); background:#fff; }
+  .btn { border:1.5px solid var(--ink); background:var(--ink); color:#fff; padding:10px 18px; font:600 16px var(--serif); border-radius:2px; cursor:pointer; } .btn:hover { background:#17434A; }
+  .btn.alt { background:transparent; color:var(--ink); } .btn.alt:hover { background:#E3EAEC; } .btn:disabled { opacity:.5; cursor:progress; }
   .btns { display:flex; gap:8px; flex-wrap:wrap; }
-  .err { background:#FCEBEB; color:#8A1F1F; border-left:4px solid var(--red); border-radius:5px; padding:9px 12px; margin-top:12px; white-space:pre-wrap; }
-  details.fmt { margin-top:14px; } details.fmt summary { cursor:pointer; font-weight:600; font-size:14px; }
-  code { background:#ECEEF3; padding:1px 6px; border-radius:4px; font:500 12.5px var(--mono); margin-right:3px; display:inline-block; }
-  .tw { overflow:auto; border:1px solid var(--line); border-radius:8px; background:#fff; max-height:520px; }
-  table { border-collapse:collapse; width:100%; font-size:13.5px; }
-  th { position:sticky; top:0; background:#F0F2F6; text-align:left; padding:8px 11px; white-space:nowrap; font-weight:600; font-size:12.5px; border-bottom:1px solid var(--line); cursor:pointer; user-select:none; }
-  td { padding:7px 11px; border-bottom:1px solid #EEF0F4; white-space:nowrap; } td.num { text-align:right; font:500 13px var(--mono); }
-  td.wrapc { white-space:normal; min-width:240px; } .fmt td { white-space:normal; }
+  .err { color:#7C1D0E; border-left:4px solid var(--stamp); background:#FBE6E1; padding:8px 12px; margin-top:12px; white-space:pre-wrap; font-size:15px; }
+  details.fmt { margin-top:22px; } details.fmt summary { cursor:pointer; font-weight:600; }
+  code { background:#E3EAEC; padding:1px 6px; font:400 12.5px var(--mono); margin-right:3px; display:inline-block; }
+  .tw { overflow:auto; border:1px solid var(--line); background:#fff; max-height:480px; }
+  table { border-collapse:collapse; width:100%; font-size:15px; }
+  th { position:sticky; top:0; background:#E8EEEF; text-align:left; padding:7px 11px; white-space:nowrap; font:500 12px var(--mono); border-bottom:1px solid var(--ink); cursor:pointer; user-select:none; }
+  td { padding:6px 11px; border-bottom:1px solid #DDE5E7; white-space:nowrap; } td.num { text-align:right; font:400 13px var(--mono); } .fmt td { white-space:normal; }
+  .loading { padding:30px 0; display:flex; gap:12px; align-items:center; color:var(--muted); font-style:italic; }
+  .loading i { width:10px; height:10px; background:var(--stamp); border-radius:50%; animation:blink 1s infinite; } .loading i:nth-child(2){ animation-delay:.2s } .loading i:nth-child(3){ animation-delay:.4s }
+  @keyframes blink { 0%,100%{ opacity:.2 } 50%{ opacity:1 } }
 
-  .loading { padding:40px 0; color:var(--muted); display:flex; align-items:center; gap:14px; }
-  .bars { display:flex; gap:4px; align-items:flex-end; height:24px; } .bars i { width:6px; background:var(--ink); animation:eq .9s ease-in-out infinite; } .bars i:nth-child(2){ animation-delay:.12s } .bars i:nth-child(3){ animation-delay:.24s } .bars i:nth-child(4){ animation-delay:.36s }
-  @keyframes eq { 0%,100%{ height:6px } 50%{ height:24px } }
+  /* memo */
+  .memo { display:grid; grid-template-columns:minmax(0,1fr) 270px; gap:48px; }
+  .memo .head { border-top:3px double var(--ink); border-bottom:1px solid var(--ink); padding:12px 0; margin-bottom:22px; display:grid; grid-template-columns:90px 1fr; row-gap:2px; }
+  .memo .head dt { font:500 12px var(--mono); color:var(--muted); padding-top:4px; } .memo .head dd { margin:0; font-weight:500; }
+  .memo p { margin:0 0 16px; max-width:62ch; } .memo b.n { font:500 .88em var(--mono); background:#E3EAEC; padding:0 5px; }
+  .memo .actions { margin:0; padding-left:22px; max-width:62ch; } .memo .actions li { margin-bottom:6px; }
+  .stamp { display:inline-block; font:500 12px var(--mono); letter-spacing:.1em; color:var(--stamp); border:2px solid var(--stamp); padding:3px 10px; transform:rotate(-3deg); margin-bottom:14px; }
+  .side-note { border-left:1px solid var(--line); padding-left:26px; align-self:start; }
+  .tally { margin:0 0 18px; } .tally b { display:block; font:500 34px/1 var(--mono); letter-spacing:-.04em; } .tally span { color:var(--muted); font-size:15px; }
+  .warn { border-left:4px solid var(--amber); background:#F6EBD2; padding:6px 11px; margin:8px 0; font-size:14.5px; }
 
-  .ledger { display:grid; grid-template-columns:repeat(4,1fr); border-top:2px solid var(--ink); border-bottom:1px solid var(--line); margin:18px 0 6px; }
-  .cell { padding:14px 18px 14px 0; } .cell + .cell { padding-left:18px; border-left:1px solid var(--line); }
-  .cell .v { font:600 34px/1.05 var(--mono); letter-spacing:-.04em; } .cell .l { color:var(--muted); font-size:13px; margin-top:4px; }
-  .src { color:var(--muted); font:400 12.5px var(--mono); margin-top:10px; } .warn { background:#FFF4D6; border-left:4px solid var(--amber); padding:7px 12px; border-radius:5px; margin-top:8px; font-size:13.5px; }
+  /* comparison: ranked bars */
+  .rank { display:grid; grid-template-columns:1fr 1fr; gap:34px 46px; }
+  .rank h3 { margin:0 0 2px; } .rank .row { display:grid; grid-template-columns:96px 1fr 52px; align-items:center; gap:10px; height:23px; cursor:pointer; background:none; border:0; padding:0; font:inherit; color:inherit; width:100%; text-align:left; }
+  .rank .row:hover .nm { text-decoration:underline; } .rank .nm { font-size:14.5px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .rank .track { position:relative; height:9px; background:#CFDADD; } .rank .fill { position:absolute; inset:0 auto 0 0; background:var(--slate); } .rank .row.out .fill { background:var(--stamp); }
+  .rank .med { position:absolute; top:-5px; bottom:-5px; width:0; border-left:2px dashed var(--ink); } .rank .val { font:400 12.5px var(--mono); text-align:right; }
 
-  .heat th,.heat td { text-align:center; } .heat td:first-child,.heat th:first-child { text-align:left; }
-  .heat td.c { font:500 13px var(--mono); } .heat tr.pick td { box-shadow:inset 0 0 0 2px var(--ink); }
-  .heat button.rowbtn { all:unset; cursor:pointer; font-weight:600; border-bottom:2px solid var(--hl); } .heat button.rowbtn:focus-visible { outline:3px solid var(--blue); }
-  .key { display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--muted); margin-bottom:10px; } .key i { display:inline-block; width:14px; height:14px; border-radius:3px; vertical-align:-2px; margin-right:6px; }
+  /* cases */
+  .cases { display:grid; grid-template-columns:repeat(auto-fill,minmax(250px,1fr)); gap:26px 22px; }
+  .folder { all:unset; box-sizing:border-box; cursor:pointer; display:flex; flex-direction:column; justify-content:flex-start; position:relative; background:var(--panel); border:1px solid var(--ink); border-radius:0 3px 3px 3px; padding:16px 16px 14px; margin-top:16px; }
+  .folder::before { content:attr(data-id); position:absolute; top:-17px; left:-1px; background:var(--ink); color:#fff; font:500 12px var(--mono); padding:2px 12px; border-radius:3px 3px 0 0; }
+  .folder:hover { background:#fff; transform:translateY(-2px); } .folder:focus-visible { outline:3px solid var(--stamp); outline-offset:3px; }
+  .folder .nm { font:600 20px var(--serif); line-height:1.2; } .folder .st { color:var(--muted); font-size:14.5px; }
+  .folder .sc { display:flex; align-items:baseline; gap:8px; margin:10px 0 6px; } .folder .sc b { font:500 30px/1 var(--mono); letter-spacing:-.04em; }
+  .folder .tags { font-size:13.5px; color:#2B4448; } .folder.hi { border-width:2px; } .folder.hi .sc b { color:var(--stamp); } .folder.mid .sc b { color:var(--amber); }
+  .folder.ok { opacity:.75; }
+  .chip { display:inline-block; font:500 11.5px var(--mono); padding:1px 7px; border:1.5px solid currentColor; border-radius:2px; letter-spacing:.04em; }
+  .chip.Tinggi { color:var(--stamp); } .chip.Sedang { color:var(--amber); } .chip.Rendah { color:var(--slate); } .chip.Normal { color:var(--ok); }
+  dialog { border:1px solid var(--ink); background:var(--panel); color:var(--ink); padding:0; width:min(900px,94vw); max-height:90vh; border-radius:3px; box-shadow:0 30px 80px -20px rgba(12,42,46,.7); }
+  dialog::backdrop { background:rgba(12,42,46,.55); }
+  .dh { display:flex; justify-content:space-between; gap:16px; align-items:start; padding:22px 26px 14px; border-bottom:3px double var(--ink); position:sticky; top:0; background:var(--panel); z-index:2; }
+  .dh .x { all:unset; cursor:pointer; width:34px; height:34px; text-align:center; line-height:34px; font-size:18px; border:1px solid var(--ink); } .dh .x:hover { background:#E3EAEC; } .dh .x:focus-visible { outline:3px solid var(--stamp); }
+  .db { padding:6px 26px 26px; overflow:auto; }
+  .fnd { border-bottom:1px solid var(--line); padding:16px 0; } .fnd:last-child { border-bottom:0; }
+  .fnd > button.t { all:unset; cursor:pointer; display:flex; gap:12px; align-items:baseline; width:100%; } .fnd > button.t:focus-visible { outline:3px solid var(--stamp); outline-offset:3px; }
+  .fnd .tt { font:600 18px/1.3 var(--serif); flex:1; } .fnd .fid { font:400 12px var(--mono); color:var(--muted); }
+  .fnd .body { margin-top:10px; } .fnd .cmp { display:flex; gap:28px; flex-wrap:wrap; margin:10px 0; } .fnd .cmp b { display:block; font:500 24px/1.1 var(--mono); letter-spacing:-.03em; } .fnd .cmp small { color:var(--muted); font-size:14px; }
+  .fnd ul { margin:4px 0 0; padding-left:20px; } .fnd li { margin:2px 0; }
+  .filters { margin:0 0 20px; display:flex; gap:14px; align-items:center; flex-wrap:wrap; } .filters label { font-size:15px; display:flex; gap:8px; align-items:center; cursor:pointer; }
 
-  .chip { display:inline-block; font:600 12px var(--mono); padding:2px 8px; border-radius:4px; color:#fff; }
-  .chip.Tinggi { background:var(--red); } .chip.Sedang { background:var(--amber); } .chip.Rendah { background:var(--blue); } .chip.Normal { background:var(--ok); }
-  .ftable td { white-space:normal; vertical-align:top; } .ftable tr.fr { cursor:pointer; } .ftable tr.fr:hover td { background:#FAFBFD; }
-  .ftable tr.fr.open td { background:#FFFBE0; }
-  .ftable tr.fd > td { background:#FBFBFC; padding:18px 22px 22px; white-space:normal; }
-  .fd .cmp { display:flex; gap:30px; flex-wrap:wrap; margin:10px 0 4px; } .fd .cmp b { font:600 24px/1.1 var(--mono); display:block; letter-spacing:-.03em; } .fd .cmp small { color:var(--muted); font-size:12.5px; }
-  .fd ul { margin:4px 0; padding-left:20px; } .fd li { margin:2px 0; }
-  .filters { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:12px; } .filters select { border:1px solid var(--line); border-radius:6px; padding:8px 10px; font:inherit; background:#fff; }
-  .rbar { display:inline-block; height:8px; border-radius:2px; background:var(--ink); vertical-align:middle; margin-right:8px; }
+  /* assistant bar */
+  .cmdbar { position:fixed; left:0; right:0; bottom:0; z-index:10; background:var(--ink); color:#E6EEEE; border-top:3px solid var(--stamp); }
+  .cmdbar .out { max-height:46vh; overflow:auto; border-bottom:1px solid #284A50; } .cmdbar .out .wrap { padding-top:16px; padding-bottom:14px; }
+  .cmdbar .ans { white-space:pre-wrap; max-width:80ch; } .cmdbar .ans ul { margin:6px 0; padding-left:20px; }
+  .cmdbar .tools { margin-top:8px; font:400 12px var(--mono); color:#9DB3B5; } .cmdbar .tools i { font-style:normal; border:1px solid #3B5C62; padding:0 6px; margin-right:6px; }
+  .cmdbar .in { display:flex; gap:10px; align-items:center; padding-top:12px; padding-bottom:12px; }
+  .cmdbar .in label { font:500 12px var(--mono); color:#9DB3B5; white-space:nowrap; }
+  .cmdbar input { flex:1; background:#12383E; border:1px solid #3B5C62; color:#fff; padding:10px 12px; font:400 16px var(--serif); border-radius:2px; min-width:0; }
+  .cmdbar button.go { background:var(--stamp); color:#fff; border:0; padding:10px 18px; font:600 16px var(--serif); border-radius:2px; cursor:pointer; } .cmdbar button.go:disabled { opacity:.5; }
+  .cmdbar .sg { display:flex; gap:6px; flex-wrap:wrap; margin-bottom:12px; } .cmdbar .sg button { all:unset; cursor:pointer; font-size:14px; border:1px solid #3B5C62; padding:3px 10px; border-radius:99px; } .cmdbar .sg button:hover { background:#17434A; }
+  .cmdbar .close { all:unset; cursor:pointer; float:right; font:400 12px var(--mono); color:#9DB3B5; } .cmdbar .close:hover { color:#fff; }
 
-  .drawer { position:fixed; top:0; right:0; height:100vh; width:min(420px,100vw); background:var(--ink); color:#E8EAEE; z-index:20; transform:translateX(105%); transition:transform .22s ease; display:flex; flex-direction:column; padding:20px; box-shadow:-20px 0 50px -20px rgba(0,0,0,.5); }
-  .drawer.open { transform:none; }
-  .drawer header { display:flex; justify-content:space-between; align-items:center; margin-bottom:6px; } .drawer h2 { color:#fff; font-size:19px; margin:0; }
-  .drawer .x { all:unset; cursor:pointer; width:30px; height:30px; text-align:center; line-height:30px; border-radius:6px; color:#B9BFCB; } .drawer .x:hover { background:#232630; }
-  .drawer p.note { color:#9AA1B0; font-size:13px; margin:2px 0 12px; }
-  .sugg { display:flex; flex-wrap:wrap; gap:6px; margin-bottom:10px; } .sugg button { all:unset; cursor:pointer; font-size:13px; border:1px solid #3A3E4A; border-radius:99px; padding:5px 11px; color:#D4D8E0; } .sugg button:hover { background:#232630; }
-  .answer { flex:1; overflow:auto; background:#181A20; border-radius:8px; padding:14px 16px; white-space:pre-wrap; font-size:14px; min-height:120px; } .answer ul { margin:6px 0; padding-left:18px; }
-  .tools { margin:10px 0 0; font-size:12.5px; color:#8A91A0; } .tools i { font:500 12px var(--mono); font-style:normal; background:#262932; border-radius:4px; padding:1px 6px; margin-right:5px; display:inline-block; margin-bottom:4px; }
-  .ask { display:flex; gap:6px; margin-top:12px; } .ask input { flex:1; background:#181A20; border:1px solid #3A3E4A; color:#fff; border-radius:6px; padding:10px 11px; font:inherit; }
-  .scrim { position:fixed; inset:0; background:rgba(17,18,22,.4); z-index:15; }
-  footer { color:var(--muted); font-size:13px; padding:40px 0 0; max-width:70ch; }
-
-  @media (max-width:900px) {
-    .shell { grid-template-columns:1fr; } aside.side { position:static; height:auto; flex-direction:row; flex-wrap:wrap; align-items:center; padding:12px 14px; gap:10px; }
-    nav.nav { display:flex; flex-wrap:wrap; } .side .foot { display:none; } .side .dlwrap { display:none; }
-    main.main { padding:0 16px 60px; } .intake { grid-template-columns:1fr; } .intake > div + div { border-left:0; border-top:1px solid var(--line); }
-    .ledger { grid-template-columns:1fr 1fr; } .cell:nth-child(3) { border-left:0; padding-left:0; }
-  }
-  @media (prefers-reduced-motion:reduce) { .bars i { animation:none; height:14px; } .drawer { transition:none; } html { scroll-behavior:auto; } }
+  @media (max-width:860px) { .topbar .wrap { gap:10px; overflow-x:auto; } .word span { display:none; } .intake,.memo,.rank { grid-template-columns:1fr; } .intake > div + div { border-left:0; border-top:1px dashed var(--line); } .side-note { border-left:0; padding-left:0; border-top:1px solid var(--line); padding-top:18px; } .cmdbar label { display:none; } }
+  @media (prefers-reduced-motion:reduce) { .loading i { animation:none; } .folder:hover { transform:none; } }
 </style>
 </head>
 <body>
-<div class="shell">
-  <aside class="side">
-    <div class="brand"><span class="mark" aria-hidden="true"><svg width="16" height="16" viewBox="0 0 16 16"><path d="M3 8.5l3.3 3.3L13 4.5" fill="none" stroke="#111216" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></span>Retail Audit</div>
-    <nav class="nav" id="nav" aria-label="Bagian halaman">
-      <a href="#unggah" class="on">Data</a>
-      <a href="#ringkasan" aria-disabled="true" data-r>Ringkasan</a>
-      <a href="#perbandingan" aria-disabled="true" data-r>Perbandingan</a>
-      <a href="#temuan" aria-disabled="true" data-r>Temuan <small id="nTemuan"></small></a>
-      <a href="#kasir" aria-disabled="true" data-r>Skor kasir</a>
-    </nav>
-    <div class="foot">
-      <div class="dlwrap"><a id="dl" class="dl" href="#" aria-disabled="true">Unduh kertas kerja</a></div>
-      Temuan berarti perlu diperiksa, bukan bukti kecurangan.
-    </div>
-  </aside>
+<header class="topbar"><div class="wrap">
+  <div class="word">Retail Audit<span>BUKU KASUS</span></div>
+  <nav class="tabs" id="tabs" role="tablist" aria-label="Bagian">
+    <button data-v="data" class="on" role="tab">Data</button>
+    <button data-v="memo" role="tab" disabled>Memo</button>
+    <button data-v="cmp" role="tab" disabled>Perbandingan</button>
+    <button data-v="cases" role="tab" disabled>Berkas<sup id="nCases"></sup></button>
+  </nav>
+  <a id="dl" class="dl" href="#" aria-disabled="true">Unduh kertas kerja</a>
+</div></header>
 
-  <main class="main">
-    <div class="top"><span class="crumb" id="crumb">belum ada data</span><button class="btn hl" id="openAsk" type="button" disabled>Tanya asisten</button></div>
-
-    <section class="sec" id="unggah">
-      <h1>Audit transaksi toko berbasis data</h1>
-      <p class="sub">Unggah data order, refund, kas, dan stok. Setiap kasir dibandingkan dengan rekan kerjanya, yang menyimpang ditandai, dan baris data pembuktinya ditampilkan.</p>
-      <div class="panel intake">
-        <div>
-          <div id="drop" class="drop" tabindex="0" role="button" aria-label="Pilih file Excel atau CSV"><b>Tarik file Excel atau CSV ke sini</b>, atau klik untuk memilih.<br>Dua file cukup: Data Order Lengkap dan Data Master.
-            <input id="file" type="file" accept=".xlsx,.xlsm,.csv" multiple class="hidden"></div>
-          <div id="chips" class="files"></div>
-          <div id="error" class="err hidden" role="alert"></div>
-        </div>
-        <div class="opts">
-          <label>Batas diskon tanpa persetujuan (%)<input id="limit" type="number" value="20" min="5" max="90"></label>
-          <div class="btns"><button id="go" class="btn">Jalankan audit</button><button id="sample" class="btn alt" type="button">Coba data contoh</button></div>
-        </div>
+<main class="wrap">
+  <section class="view" id="v-data">
+    <h1>Transaksi mana yang tidak wajar, dan apa buktinya?</h1>
+    <p class="lede">Masukkan data penjualan, refund, kas, dan stok. Setiap kasir ditimbang terhadap rekan sejawatnya. Yang melenceng dibuatkan berkas, lengkap dengan baris data yang menjadi dasarnya.</p>
+    <div class="sheet intake">
+      <div>
+        <div id="drop" class="drop" tabindex="0" role="button" aria-label="Pilih file Excel atau CSV"><b>Letakkan file di sini</b> atau klik untuk memilih.<br><span class="small">Excel atau CSV. Dua file cukup: Data Order Lengkap dan Data Master.</span>
+          <input id="file" type="file" accept=".xlsx,.xlsm,.csv" multiple class="hidden"></div>
+        <div id="chips" class="files"></div>
+        <div id="error" class="err hidden" role="alert"></div>
       </div>
-      <details class="fmt">
-        <summary>Format kolom yang dibutuhkan</summary>
-        <p class="hint">Yang wajib hanya data Order. Makin lengkap datanya, makin banyak pemeriksaan yang berjalan. Kolom dibaca dari namanya, jadi nama file dan sheet bebas.</p>
-        <p id="samples" class="hint"></p>
-        <div class="tw"><table class="fmt"><thead><tr><th>Data</th><th>Wajib?</th><th>Kolom</th><th>Ada di contoh</th></tr></thead><tbody id="fmt"></tbody></table></div>
-      </details>
-    </section>
-
-    <div id="loading" class="loading hidden" aria-live="polite"><div class="bars"><i></i><i></i><i></i><i></i></div>Memeriksa transaksi…</div>
-
-    <div id="results" class="hidden">
-      <section class="sec" id="ringkasan">
-        <h2 id="headline"></h2>
-        <div class="ledger" id="ledger"></div>
-        <div id="warns"></div>
-      </section>
-
-      <section class="sec" id="perbandingan">
-        <h2>Perbandingan dengan rekan kerja</h2>
-        <p class="sub">Setiap sel dibandingkan dengan median semua kasir. Warna menunjukkan seberapa jauh menyimpang. Klik nama kasir untuk melihat temuannya.</p>
-        <div class="key"><span><i style="background:#F4B3B3"></i>Jauh di atas median</span><span><i style="background:#FFE3A3"></i>Di atas median</span><span><i style="background:#EEF0F4"></i>Wajar</span></div>
-        <div class="tw" style="max-height:none"><table class="heat" id="heat"></table></div>
-      </section>
-
-      <section class="sec" id="temuan">
-        <h2>Temuan dan bukti</h2>
-        <p class="sub">Klik satu baris untuk membuka penjelasan, langkah verifikasi, dan baris buktinya.</p>
-        <div class="filters"><select id="fSev" aria-label="Tingkat"><option value="">Semua tingkat</option><option>Tinggi</option><option>Sedang</option><option>Rendah</option></select><select id="fSub" aria-label="Kasir"></select></div>
-        <div class="tw" style="max-height:none"><table class="ftable" id="ftable"></table></div>
-      </section>
-
-      <section class="sec" id="kasir">
-        <h2>Skor risiko per kasir</h2>
-        <div id="riskTable"></div>
-      </section>
+      <div class="opts">
+        <label>Diskon di atas berapa persen wajib disetujui atasan?<input id="limit" type="number" value="20" min="5" max="90"></label>
+        <div class="btns"><button id="go" class="btn">Mulai periksa</button><button id="sample" class="btn alt" type="button">Pakai data contoh</button></div>
+      </div>
     </div>
-    <footer>Verifikasi dengan dokumen dan bukti fisik sebelum mengambil tindakan. Banyak temuan punya penyebab sah, seperti promosi atau pelatihan.</footer>
-  </main>
-</div>
+    <details class="fmt"><summary>Kolom apa yang harus ada?</summary>
+      <p class="small">Hanya data Order yang wajib. Tiap tabel tambahan membuka pemeriksaan baru. Kolom dikenali dari namanya, nama file dan sheet bebas.</p>
+      <p id="samples" class="small"></p>
+      <div class="tw"><table class="fmt"><thead><tr><th>Data</th><th>Wajib?</th><th>Kolom</th><th>Di contoh</th></tr></thead><tbody id="fmt"></tbody></table></div>
+    </details>
+    <div id="loading" class="loading hidden" aria-live="polite"><i></i><i></i><i></i>Membaca transaksi satu per satu…</div>
+  </section>
 
-<div class="scrim hidden" id="scrim"></div>
-<aside class="drawer" id="drawer" aria-label="Asisten audit" aria-hidden="true">
-  <header><h2>Asisten audit</h2><button class="x" id="closeAsk" aria-label="Tutup">✕</button></header>
-  <p class="note" id="astNote"></p>
-  <div class="sugg" id="sugg"></div>
-  <div class="answer" id="answer" aria-live="polite">Jawaban muncul di sini.</div>
-  <div class="tools" id="tools"></div>
-  <div class="ask"><input id="q" placeholder="Contoh: jelaskan temuan F003" aria-label="Pertanyaan"><button class="btn hl" id="askBtn">Tanya</button></div>
-</aside>
+  <section class="view hidden" id="v-memo">
+    <div class="memo">
+      <article>
+        <span class="stamp">PERLU DIPERIKSA</span>
+        <h2 id="mTitle"></h2>
+        <dl class="head" id="mHead"></dl>
+        <div id="mBody"></div>
+      </article>
+      <aside class="side-note" id="mSide" aria-label="Angka ringkas"></aside>
+    </div>
+  </section>
+
+  <section class="view hidden" id="v-cmp">
+    <h2>Siapa yang jauh dari kelompoknya?</h2>
+    <p class="lede">Satu batang per kasir. Garis putus-putus menandai median semua kasir. Batang merah berarti kasir itu sudah punya temuan dan nilainya jauh di atas median. Klik nama untuk membuka berkasnya.</p>
+    <div class="rank" id="rank"></div>
+  </section>
+
+  <section class="view hidden" id="v-cases">
+    <h2>Berkas kasus</h2>
+    <p class="lede">Satu map per orang atau toko, diurutkan dari skor risiko tertinggi. Buka map untuk membaca temuan, langkah verifikasi, dan bukti.</p>
+    <div class="filters"><label><input type="checkbox" id="onlyHits" checked> Tampilkan hanya yang punya temuan</label></div>
+    <div class="cases" id="cases"></div>
+  </section>
+</main>
+
+<dialog id="dlg" aria-labelledby="dlgT"><div class="dh"><div id="dlgHead"></div><button class="x" id="dlgX" aria-label="Tutup">✕</button></div><div class="db" id="dlgBody"></div></dialog>
+
+<div class="cmdbar hidden" id="cmd">
+  <div class="out hidden" id="out"><div class="wrap"><button class="close" id="outX">tutup jawaban</button><div class="ans" id="ans" aria-live="polite"></div><div class="tools" id="tools"></div></div></div>
+  <div class="wrap">
+    <div class="sg" id="sg" style="padding-top:10px;margin:0"></div>
+    <div class="in"><label for="q">TANYA</label><input id="q" placeholder="Misalnya: kenapa Budi masuk daftar?" autocomplete="off"><button class="go" id="askBtn">Tanya</button></div>
+  </div>
+</div>
 
 <script>
 const $ = id => document.getElementById(id);
 const fmt = n => (n === null || n === undefined || n === "") ? "" : Number(n).toLocaleString("id-ID", {maximumFractionDigits: 2});
 const rp = n => "Rp " + Math.round(n).toLocaleString("id-ID");
 const rpShort = n => n >= 1e9 ? "Rp " + (n / 1e9).toLocaleString("id-ID", {maximumFractionDigits: 2}) + " M" : n >= 1e6 ? "Rp " + (n / 1e6).toLocaleString("id-ID", {maximumFractionDigits: 1}) + " jt" : rp(n);
-let files = [], D = null, openId = null;
+let files = [], D = null;
 
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
@@ -212,6 +199,15 @@ function el(tag, props = {}, ...kids) {
   for (const k of kids) if (k !== null && k !== undefined && k !== false) e.append(k.nodeType ? k : document.createTextNode(k));
   return e;
 }
+const N = t => el("b", {class: "n", text: t});
+
+// ---- tabs
+function show(v) {
+  document.querySelectorAll("#tabs button").forEach(b => { const on = b.dataset.v === v; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
+  ["data", "memo", "cmp", "cases"].forEach(k => $("v-" + k).classList.toggle("hidden", k !== v));
+  scrollTo({top: 0});
+}
+$("tabs").onclick = e => { const b = e.target.closest("button"); if (b && !b.disabled) show(b.dataset.v); };
 
 // ---- upload
 const drop = $("drop"), input = $("file");
@@ -226,128 +222,123 @@ function chips() { $("chips").replaceChildren(...files.map((f, i) => el("span", 
 function showError(m) { const e = $("error"); e.textContent = m || ""; e.classList.toggle("hidden", !m); }
 
 async function run(url, fd) {
-  showError(""); $("results").classList.add("hidden"); $("loading").classList.remove("hidden"); $("go").disabled = $("sample").disabled = true;
+  showError(""); $("loading").classList.remove("hidden"); $("go").disabled = $("sample").disabled = true;
   fd.append("discount_limit", $("limit").value);
   try {
     const r = await fetch(url, {method: "POST", body: fd});
     const d = await r.json().catch(() => ({}));
     if (!r.ok) throw new Error(typeof d.detail === "string" ? d.detail : "Permintaan tidak valid. Periksa file dan pengaturan.");
-    D = d; openId = null; render();
-    $("ringkasan").scrollIntoView({behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"});
-  } catch (e) { showError(e.message); $("unggah").scrollIntoView(); }
+    D = d; render(); show("memo");
+  } catch (e) { showError(e.message); }
   finally { $("loading").classList.add("hidden"); $("go").disabled = $("sample").disabled = false; }
 }
 $("go").onclick = () => { if (!files.length) return showError("Pilih file dulu. Minimal data Order."); const fd = new FormData(); files.forEach(f => fd.append("files", f)); run("/api/analyze", fd); };
 $("sample").onclick = () => run("/api/analyze/sample", new FormData());
 
-// ---- tables
-function table(cols, rows, {cell} = {}) {
+function table(cols, rows) {
   let key = null, asc = true; const wrap = el("div", {class: "tw"});
   const draw = () => {
     const data = key ? [...rows].sort((a, b) => { const x = a[key], y = b[key]; return (typeof x === "number" && typeof y === "number" ? x - y : String(x ?? "").localeCompare(String(y ?? ""), "id")) * (asc ? 1 : -1); }) : rows;
     wrap.replaceChildren(el("table", {}, el("thead", {}, el("tr", {}, ...cols.map(c => { const th = el("th", {text: c.label + (key === c.key ? (asc ? " ▲" : " ▼") : "")}); th.onclick = () => { asc = key === c.key ? !asc : true; key = c.key; draw(); }; return th; }))),
-      el("tbody", {}, ...data.slice(0, 800).map(r => el("tr", {}, ...cols.map(c => { const v = r[c.key]; const td = el("td", {class: typeof v === "number" ? "num" : ""}); if (cell && cell(td, c, v, r)) return td; td.textContent = typeof v === "number" ? fmt(v) : (v ?? ""); return td; }))))));
+      el("tbody", {}, ...data.slice(0, 800).map(r => el("tr", {}, ...cols.map(c => { const v = r[c.key]; return el("td", {class: typeof v === "number" ? "num" : "", text: typeof v === "number" ? fmt(v) : (v ?? "")}); }))))));
   };
   draw(); return wrap;
 }
 
-// ---- render
+// ---- render all views
 function render() {
-  const k = D.kpi, sv = k.severity;
-  $("crumb").textContent = D.meta.date_from + " → " + D.meta.date_to + " · " + fmt(D.meta.n_orders) + " order";
-  $("headline").replaceChildren(k.high_risk_cashiers ? el("span", {}, el("mark", {class: "hl", text: fmt(k.high_risk_cashiers) + " dari " + D.meta.n_cashiers + " kasir"}), " perlu diperiksa lebih dulu") : "Tidak ada kasir berisiko tinggi");
-  const cell = (v, l) => el("div", {class: "cell"}, el("div", {class: "v", text: v}), el("div", {class: "l", text: l}));
-  $("ledger").replaceChildren(cell(fmt(sv.Tinggi), "temuan tingkat tinggi"), cell(fmt(sv.Sedang + sv.Rendah), "temuan sedang dan rendah"), cell(rpShort(k.amount), "nilai yang perlu ditelusuri"), cell(fmt(D.meta.n_stores), "toko diperiksa"));
-  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname"};
-  $("warns").replaceChildren(el("div", {class: "src", text: "data dibaca: " + Object.keys(D.detected_files).map(x => names[x]).join(", ")}), ...(D.meta.warnings || []).map(w => el("div", {class: "warn", text: w})));
-  heat(); findingsTable(); riskTable(); assistant();
-  $("nTemuan").textContent = D.findings.length;
-  document.querySelectorAll("#nav a[data-r]").forEach(a => a.removeAttribute("aria-disabled"));
-  const dl = $("dl"); dl.href = "/api/report/" + D.job_id + ".xlsx"; dl.removeAttribute("aria-disabled"); $("openAsk").disabled = false;
-  $("results").classList.remove("hidden");
+  memo(); rank(); cases();
+  document.querySelectorAll("#tabs button").forEach(b => b.disabled = false);
+  $("nCases").textContent = D.findings.length;
+  const dl = $("dl"); dl.href = "/api/report/" + D.job_id + ".xlsx"; dl.removeAttribute("aria-disabled");
+  $("cmd").classList.remove("hidden"); assistant();
 }
 
-function robustZ(vals) {
-  const s = [...vals].sort((a, b) => a - b), med = s[Math.floor(s.length / 2)];
-  const dev = vals.map(v => Math.abs(v - med)).sort((a, b) => a - b), mad = Math.max(dev[Math.floor(dev.length / 2)] * 1.4826, 0.0001 * Math.max(1, Math.abs(med)), 0.05 * Math.max(...vals.map(Math.abs), 0.0001) * 0.25);
-  return vals.map(v => (v - med) / mad);
-}
-function heat() {
-  const defs = [["refund_pct", "Refund (%)"], ["diskon_pct", "Order berdiskon (%)"], ["void_pct", "Void (%)"], ["kas_kurang", "Kas kurang (kali)"]];
-  const risk = Object.fromEntries(D.risk.map(r => [r.cashier_id, r]));
-  const rows = [...D.peers].sort((a, b) => (risk[b.cashier_id]?.risk ?? 0) - (risk[a.cashier_id]?.risk ?? 0));
-  const z = defs.map(([m]) => robustZ(rows.map(r => r[m])));
-  const head = el("thead", {}, el("tr", {}, el("th", {text: "Kasir"}), ...defs.map(d => el("th", {text: d[1]})), el("th", {text: "Skor risiko"})));
-  const body = el("tbody", {}, ...rows.map((r, i) => {
-    const b = el("button", {class: "rowbtn", type: "button", text: r.nama + " (" + r.cashier_id + ")"});
-    b.onclick = () => { $("fSub").value = r.cashier_id; $("fSev").value = ""; findingsTable(true); $("temuan").scrollIntoView({behavior: "smooth"}); };
-    return el("tr", {}, el("td", {}, b), ...defs.map(([m], j) => { const zz = z[j][i], td = el("td", {class: "c", text: fmt(r[m])});
-      td.style.background = zz >= 3 ? "#F4B3B3" : zz >= 1.5 ? "#FFE3A3" : "#EEF0F4"; return td; }),
-      el("td", {class: "c"}, el("span", {class: "chip " + (risk[r.cashier_id]?.level || "Normal"), text: (risk[r.cashier_id]?.risk ?? 0) + ""})));
-  }));
-  $("heat").replaceChildren(head, body);
-}
-
-// ---- findings as ledger rows with inline detail
-function findingsTable(keepSel) {
-  const subs = [...new Map(D.findings.map(f => [f.subject, f.subject_name + (f.subject_type === "cashier" ? " (" + f.subject + ")" : "")])).entries()];
-  const cur = keepSel ? $("fSub").value : "";
-  $("fSub").replaceChildren(el("option", {value: "", text: "Semua kasir dan toko"}), ...subs.map(([v, t]) => el("option", {value: v, text: t})));
-  if (cur) $("fSub").value = cur;
-  $("fSev").onchange = $("fSub").onchange = () => { openId = null; drawFindings(); };
-  drawFindings();
-}
-function drawFindings() {
-  const s = $("fSev").value, u = $("fSub").value, fs = D.findings.filter(f => (!s || f.severity === s) && (!u || f.subject === u));
-  const t = $("ftable");
-  const head = el("thead", {}, el("tr", {}, ...["ID", "Tingkat", "Subjek", "Temuan", "Nilai", "Bukti"].map(h => el("th", {text: h}))));
-  const body = el("tbody");
-  if (!fs.length) body.append(el("tr", {}, el("td", {colspan: 6, text: "Tidak ada temuan untuk filter ini."})));
-  fs.forEach(f => {
-    const row = el("tr", {class: "fr" + (openId === f.id ? " open" : ""), tabindex: 0, role: "button", "aria-expanded": String(openId === f.id)},
-      el("td", {class: "num", text: f.id}), el("td", {}, el("span", {class: "chip " + f.severity, text: f.severity + " " + f.score})),
-      el("td", {text: f.subject_name + (f.store ? " · " + f.store : "")}), el("td", {text: f.title}), el("td", {class: "num", text: f.amount ? rpShort(f.amount) : "-"}), el("td", {class: "num", text: fmt(f.evidence_count)}));
-    const toggle = () => { openId = openId === f.id ? null : f.id; drawFindings(); };
-    row.onclick = toggle; row.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); toggle(); } };
-    body.append(row);
-    if (openId === f.id) body.append(el("tr", {class: "fd"}, el("td", {colspan: 6}, detail(f))));
+function memo() {
+  const k = D.kpi, sv = k.severity, m = D.meta, hi = D.risk.filter(r => r.level === "Tinggi");
+  $("mTitle").textContent = hi.length ? hi.length + " dari " + m.n_cashiers + " kasir menunjukkan pola yang perlu ditelusuri" : "Tidak ada kasir dengan pola berisiko tinggi";
+  const row = (a, b) => [el("dt", {text: a}), el("dd", {text: b})];
+  $("mHead").replaceChildren(...row("PERIHAL", "Hasil pemeriksaan transaksi toko"), ...row("PERIODE", m.date_from + " sampai " + m.date_to), ...row("CAKUPAN", fmt(m.n_orders) + " order, " + m.n_stores + " toko, " + m.n_cashiers + " kasir"));
+  const body = $("mBody"); body.replaceChildren();
+  body.append(el("p", {}, "Pemeriksaan menghasilkan ", N(sv.Tinggi + " temuan tingkat tinggi"), " dan ", N(sv.Sedang + sv.Rendah + " lainnya"), ", dengan nilai terkait sekitar ", N(rpShort(k.amount)), ". Temuan ini adalah petunjuk untuk ditelusuri, bukan kesimpulan bahwa ada kecurangan."));
+  const byC = {}; D.findings.forEach(f => { if (f.subject_type === "cashier") (byC[f.subject] = byC[f.subject] || []).push(f); });
+  hi.slice(0, 4).forEach(r => {
+    const fs = (byC[r.cashier_id] || []).slice(0, 2);
+    body.append(el("p", {}, el("b", {text: r.nama}), " (", r.cashier_id, ", ", r.store, ") memiliki skor ", N(String(r.risk)), ". ", fs.map(f => f.title).join(". ") + "."));
   });
-  t.replaceChildren(head, body);
+  const other = D.findings.filter(f => f.subject_type !== "cashier");
+  if (other.length) body.append(el("p", {text: "Di luar kasir: " + other.map(f => f.title + " (" + f.subject_name + ")").join("; ") + "."}));
+  const steps = []; D.findings.slice(0, 5).forEach(f => { if (f.steps[0] && !steps.includes(f.steps[0])) steps.push(f.steps[0]); });
+  if (steps.length) body.append(el("h3", {text: "Yang sebaiknya dikerjakan lebih dulu"}), el("ol", {class: "actions"}, ...steps.map(s => el("li", {text: s}))));
+  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname"};
+  const t = (v, l) => el("div", {class: "tally"}, el("b", {text: v}), el("span", {text: l}));
+  $("mSide").replaceChildren(t(String(sv.Tinggi), "temuan tinggi"), t(String(sv.Sedang + sv.Rendah), "temuan sedang dan rendah"), t(rpShort(k.amount), "nilai yang perlu ditelusuri"),
+    el("div", {class: "label", text: "DATA DIBACA"}), el("p", {class: "small", text: Object.keys(D.detected_files).map(x => names[x]).join(", ")}), ...(m.warnings || []).map(w => el("div", {class: "warn", text: w})));
 }
-function detail(f) {
+
+function median(a) { const s = [...a].sort((x, y) => x - y); return s[Math.floor(s.length / 2)]; }
+function rank() {
+  const defs = [["refund_pct", "Refund, persen dari order"], ["diskon_pct", "Order berdiskon, persen"], ["void_pct", "Void, persen dari order"], ["kas_kurang", "Penutupan kas yang kurang, kali"]];
+  const hit = new Set(D.findings.filter(f => f.subject_type === "cashier").map(f => f.subject));
+  $("rank").replaceChildren(...defs.map(([m, label]) => {
+    const rows = [...D.peers].sort((a, b) => b[m] - a[m]), max = Math.max(rows[0][m], 0.0001), med = median(rows.map(r => r[m]));
+    const box = el("div", {}, el("h3", {text: label}));
+    rows.forEach(r => {
+      const out = hit.has(r.cashier_id) && r[m] >= 2 * Math.max(med, 0.0001);
+      const b = el("button", {class: "row" + (out ? " out" : ""), type: "button"}, el("span", {class: "nm", text: r.nama}),
+        el("span", {class: "track"}, el("span", {class: "fill", style: "width:" + (r[m] / max * 100) + "%"}), el("span", {class: "med", style: "left:" + (med / max * 100) + "%"})), el("span", {class: "val", text: fmt(r[m])}));
+      b.onclick = () => openCase(r.cashier_id); box.append(b);
+    });
+    return box;
+  }));
+}
+
+// ---- cases
+function groups() {
+  const g = new Map(); D.risk.forEach(r => g.set(r.cashier_id, {id: r.cashier_id, name: r.nama, sub: r.store, risk: r.risk, level: r.level, orders: r.orders, fs: [], type: "cashier"}));
+  D.findings.forEach(f => { if (f.subject_type === "cashier") g.get(f.subject)?.fs.push(f); else { const k = "x:" + f.subject; if (!g.has(k)) g.set(k, {id: f.subject_type === "store" ? "TOKO" : "DATA", name: f.subject_name, sub: f.subject_type === "store" ? "Temuan tingkat toko" : "Konsistensi data", risk: f.score, level: f.severity, fs: [], type: f.subject_type}); g.get(k).fs.push(f); } });
+  return [...g.values()].sort((a, b) => b.risk - a.risk);
+}
+function cases() {
+  const draw = () => {
+    const only = $("onlyHits").checked, gs = groups().filter(g => !only || g.fs.length);
+    $("cases").replaceChildren(...gs.map(g => {
+      const cls = g.level === "Tinggi" ? "hi" : g.level === "Sedang" ? "mid" : g.fs.length ? "" : "ok";
+      const f = el("button", {class: "folder " + cls, type: "button", "data-id": g.id}, el("div", {class: "nm", text: g.name}), el("div", {class: "st", text: g.sub}),
+        el("div", {class: "sc"}, el("b", {text: String(g.risk)}), el("span", {class: "chip " + g.level, text: g.level.toUpperCase()})),
+        el("div", {class: "tags", text: g.fs.length ? g.fs.length + " temuan: " + [...new Set(g.fs.map(x => x.rule.replaceAll("_", " ")))].slice(0, 3).join(", ") : "Tidak ada temuan"}));
+      f.onclick = () => openGroup(g); return f;
+    }));
+  };
+  $("onlyHits").onchange = draw; draw();
+}
+function openCase(cashierId) { const g = groups().find(x => x.id === cashierId); if (g) { show("cases"); openGroup(g); } }
+function openGroup(g) {
+  $("dlgHead").replaceChildren(el("div", {class: "label", text: "BERKAS " + g.id}), el("h2", {id: "dlgT", text: g.name, style: "margin:2px 0 0"}), el("div", {class: "small", text: g.sub + (g.orders ? " · " + fmt(g.orders) + " order" : "") + " · skor risiko " + g.risk}));
+  $("dlgBody").replaceChildren(...(g.fs.length ? g.fs.map((f, i) => finding(f, i === 0)) : [el("p", {class: "small", text: "Tidak ada temuan untuk kasir ini. Angkanya berada dalam kisaran rekan kerjanya."})]));
+  const d = $("dlg"); if (!d.open) d.showModal();
+}
+function finding(f, open) {
+  const body = el("div", {class: "body" + (open ? "" : " hidden")}), t = el("button", {class: "t", type: "button", "aria-expanded": String(open)}, el("span", {class: "chip " + f.severity, text: f.severity.toUpperCase()}), el("span", {class: "tt", text: f.title}), el("span", {class: "fid", text: f.id}));
   const cmp = el("div", {class: "cmp"});
   if (f.metric !== null && f.metric !== undefined) cmp.append(el("div", {}, el("b", {text: fmt(f.metric)}), el("small", {text: "pada subjek ini"})));
   if (f.peer) cmp.append(el("div", {}, el("b", {text: fmt(f.peer)}), el("small", {text: "median rekan kerja"})));
   cmp.append(el("div", {}, el("b", {text: rpShort(f.amount)}), el("small", {text: "nilai terkait"})), el("div", {}, el("b", {text: fmt(f.evidence_count)}), el("small", {text: "baris bukti"})));
-  const wrap = el("div", {}, el("p", {style: "margin:0;max-width:80ch", text: f.detail}), cmp, el("h3", {text: "Langkah verifikasi"}), el("ul", {}, ...f.steps.map(s => el("li", {text: s}))),
-    el("h3", {text: "Bukti" + (f.evidence_count > f.evidence.length ? " (" + f.evidence.length + " pertama dari " + fmt(f.evidence_count) + ", semuanya ada di Excel)" : "")}),
-    table(f.evidence_cols.map(c => ({key: c, label: c})), f.evidence));
-  const ask = el("button", {class: "btn alt", type: "button", style: "margin-top:12px", text: "Tanya asisten tentang " + f.id});
-  ask.onclick = e => { e.stopPropagation(); openDrawer("Jelaskan temuan " + f.id, true); };
-  wrap.append(ask); return wrap;
+  body.append(el("p", {style: "margin:0", text: f.detail}), cmp, el("h3", {text: "Cara memverifikasi"}), el("ul", {}, ...f.steps.map(s => el("li", {text: s}))),
+    el("h3", {text: "Bukti" + (f.evidence_count > f.evidence.length ? ", " + f.evidence.length + " pertama dari " + fmt(f.evidence_count) + " (semuanya ada di Excel)" : "")}), table(f.evidence_cols.map(c => ({key: c, label: c})), f.evidence));
+  const ask = el("button", {class: "btn alt", type: "button", style: "margin-top:12px", text: "Tanya tentang " + f.id}); ask.onclick = () => { $("dlg").close(); $("q").value = "Jelaskan temuan " + f.id; ask_(); };
+  body.append(ask);
+  t.onclick = () => { const h = body.classList.toggle("hidden"); t.setAttribute("aria-expanded", String(!h)); };
+  return el("div", {class: "fnd"}, t, body);
 }
+$("dlgX").onclick = () => $("dlg").close();
+$("dlg").addEventListener("click", e => { if (e.target === $("dlg")) $("dlg").close(); });
 
-function riskTable() {
-  const max = Math.max(...D.risk.map(r => r.risk), 1);
-  $("riskTable").replaceChildren(table([{key: "cashier_id", label: "ID"}, {key: "nama", label: "Nama"}, {key: "store", label: "Toko"}, {key: "orders", label: "Order"}, {key: "risk", label: "Skor"}, {key: "level", label: "Tingkat"}, {key: "findings", label: "Temuan"}, {key: "amount", label: "Nilai (Rp)"}, {key: "rules", label: "Aturan terpicu"}], D.risk,
-    {cell: (td, c, v) => { if (c.key === "risk") { td.className = ""; td.append(el("span", {class: "rbar", style: "width:" + Math.round(v / max * 70) + "px"}), el("span", {class: "mono", text: String(v)})); return true; }
-      if (c.key === "level") { td.append(el("span", {class: "chip " + v, text: v})); return true; } if (c.key === "rules") { td.className = "wrapc"; td.textContent = v; return true; } return false; }}));
-}
-
-// ---- assistant drawer
-const drawer = $("drawer");
-function openDrawer(q, go) {
-  drawer.classList.add("open"); drawer.setAttribute("aria-hidden", "false"); $("scrim").classList.remove("hidden");
-  if (q) $("q").value = q; $("q").focus(); if (go) ask();
-}
-function closeDrawer() { drawer.classList.remove("open"); drawer.setAttribute("aria-hidden", "true"); $("scrim").classList.add("hidden"); $("openAsk").focus(); }
-$("openAsk").onclick = () => openDrawer(); $("closeAsk").onclick = closeDrawer; $("scrim").onclick = closeDrawer;
-document.addEventListener("keydown", e => { if (e.key === "Escape" && drawer.classList.contains("open")) closeDrawer(); });
+// ---- assistant bar
 function assistant() {
-  $("astNote").textContent = D.assistant.enabled ? "Memeriksa temuan dengan alat baca-saja. Setiap alat yang dipakai ditampilkan di bawah jawaban." : "Mode standar: jawaban disusun dari aturan. Isi INSIGHT_API_KEY di server untuk jawaban yang lebih bebas.";
   const top = D.findings[0], tk = D.risk[0];
-  $("sugg").replaceChildren(...["Ringkas hasil audit", top ? "Jelaskan temuan " + top.id : null, tk ? "Ceritakan kasir " + tk.cashier_id : null].filter(Boolean).map(t => { const b = el("button", {type: "button", text: t}); b.onclick = () => { $("q").value = t; ask(); }; return b; }));
-  $("answer").textContent = "Jawaban muncul di sini."; $("tools").replaceChildren();
+  $("sg").replaceChildren(...["Ringkas hasilnya", top ? "Jelaskan temuan " + top.id : null, tk ? "Ceritakan " + tk.nama : null].filter(Boolean).map(t => { const b = el("button", {type: "button", text: t}); b.onclick = () => { $("q").value = t; ask_(); }; return b; }));
+  $("q").placeholder = D.assistant.enabled ? "Tanya apa saja tentang temuan ini" : "Misalnya: kenapa " + (tk ? tk.nama : "seorang kasir") + " masuk daftar? (mode standar)";
 }
 function md(target, text) {
   target.replaceChildren(); let ul = null;
@@ -357,25 +348,20 @@ function md(target, text) {
     if (li) { if (!ul) { ul = el("ul"); target.append(ul); } ul.append(el("li", {}, frag)); } else { ul = null; target.append(frag, document.createTextNode("\n")); }
   });
 }
-async function ask() {
+async function ask_() {
   const q = $("q").value.trim(); if (!q) return;
-  $("askBtn").disabled = true; $("answer").textContent = "Memeriksa…"; $("tools").replaceChildren();
+  $("out").classList.remove("hidden"); $("askBtn").disabled = true; $("ans").textContent = "Memeriksa…"; $("tools").replaceChildren();
   try {
     const r = await fetch("/api/ask", {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify({job_id: D.job_id, question: q})});
     const d = await r.json(); if (!r.ok) throw new Error(d.detail || "Gagal");
-    md($("answer"), d.answer);
-    if (d.steps.length) $("tools").replaceChildren("Alat yang dipakai: ", ...d.steps.map(s => el("i", {text: s.tool + (s.args && Object.values(s.args).filter(Boolean).length ? "(" + Object.values(s.args).filter(Boolean).join(", ") + ")" : "")})));
-  } catch (e) { $("answer").textContent = e.message; } finally { $("askBtn").disabled = false; }
+    md($("ans"), d.answer);
+    if (d.steps.length) $("tools").replaceChildren("alat dipakai: ", ...d.steps.map(s => el("i", {text: s.tool + (s.args && Object.values(s.args).filter(Boolean).length ? "(" + Object.values(s.args).filter(Boolean).join(", ") + ")" : "")})));
+  } catch (e) { $("ans").textContent = e.message; } finally { $("askBtn").disabled = false; }
 }
-$("askBtn").onclick = ask; $("q").onkeydown = e => { if (e.key === "Enter") ask(); };
-
-// ---- nav highlight
-const links = [...document.querySelectorAll("#nav a")];
-const secs = links.map(a => document.querySelector(a.getAttribute("href")));
-addEventListener("scroll", () => { let i = 0; secs.forEach((s, j) => { if (s && !s.closest(".hidden") && s.getBoundingClientRect().top < 140) i = j; }); links.forEach((a, j) => a.classList.toggle("on", j === i)); }, {passive: true});
+$("askBtn").onclick = ask_; $("q").onkeydown = e => { if (e.key === "Enter") ask_(); }; $("outX").onclick = () => $("out").classList.add("hidden");
 
 fetch("/api/schema").then(r => r.json()).then(sc => {
-  $("samples").replaceChildren("Unduh contoh: ", ...sc.sample_files.flatMap((n, i) => [i ? " · " : "", el("a", {href: "/sample/" + n, text: n})]));
+  $("samples").replaceChildren("Contoh untuk diunduh: ", ...sc.sample_files.flatMap((n, i) => [i ? " dan " : "", el("a", {href: "/sample/" + n, text: n})]));
   $("fmt").replaceChildren(...sc.files.map(f => el("tr", {}, el("td", {text: f.label}), el("td", {text: f.required ? "Wajib" : "Opsional"}), el("td", {}, ...f.columns.map(c => el("code", {text: c}))), el("td", {text: f.sample}))));
 }).catch(() => {});
 </script>
