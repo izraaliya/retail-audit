@@ -1,23 +1,22 @@
 """Audit assistant: an agent that investigates the findings with read-only tools and writes an evidence-based answer.
 
-When a local Ollama server is running, the model chooses which tools to call (function calling) and every call is logged.
-Without Ollama, or when the call fails, it answers from the same tools with fixed rules, so the page always works.
-Nothing leaves the machine: no cloud API and no key.
+When GEMINI_API_KEY is set, a Gemini model chooses which tools to call (function calling) and every call is logged.
+Without a key, or when the call fails, it answers from the same tools with fixed rules, so the page always works.
+With a key, the question and the audit facts the tools return (finding ids, cashier ids and names, amounts) are sent to the Gemini API.
 """
 from __future__ import annotations
 
 import json
 import os
 import re
-import time
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor, TimeoutError as FutureTimeout
 
 import pandas as pd
 
-DEFAULT_MODEL = "qwen2.5:7b"
-DEFAULT_HOST = "http://localhost:11434"
+DEFAULT_MODEL = "gemini-3.5-flash"
+API_BASE = "https://generativelanguage.googleapis.com/v1beta"
 _pool = ThreadPoolExecutor(max_workers=2)
 
 STEPS = {
@@ -44,12 +43,12 @@ def rp(x) -> str:
     return 'Rp ' + f'{int(x):,}'.replace(',', '.')
 
 
-def _host() -> str:
-    return (os.getenv("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/") if (os.getenv("OLLAMA_HOST") or DEFAULT_HOST).startswith("http") else "http://" + (os.getenv("OLLAMA_HOST") or DEFAULT_HOST).rstrip("/")
+def _api_key() -> str:
+    return (os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or "").strip()
 
 
 def _model() -> str:
-    return os.getenv("OLLAMA_MODEL") or DEFAULT_MODEL
+    return (os.getenv("GEMINI_MODEL") or DEFAULT_MODEL).strip()
 
 
 def _timeout() -> float:
@@ -59,41 +58,52 @@ def _timeout() -> float:
         return 90.0
 
 
-_probe: dict = {"t": 0.0, "ok": False}
-
-
 def enabled() -> bool:
-    """True when the Ollama server answers. Cached for 10 seconds so the page load stays quick."""
-    if os.getenv("ASSISTANT_MODE", "").lower() == "rules":
-        return False
-    if time.time() - _probe["t"] > 10:
-        try:
-            with urllib.request.urlopen(_host() + "/api/tags", timeout=1.5) as r:
-                _probe["ok"] = r.status == 200
-        except Exception:
-            _probe["ok"] = False
-        _probe["t"] = time.time()
-    return _probe["ok"]
+    """True when a Gemini API key is configured (and ASSISTANT_MODE is not 'rules'). No network call, so the page load stays quick."""
+    return os.getenv("ASSISTANT_MODE", "").lower() != "rules" and bool(_api_key())
 
 
-def _chat(messages: list, tools: list | None, timeout: float) -> dict:
-    body = {"model": _model(), "messages": messages, "stream": False, "options": {"temperature": 0.2, "num_ctx": 8192}}
+def _http_error(code: int) -> str:
+    if code in (400, 401, 403):
+        return f"Gemini menolak permintaan (HTTP {code}); periksa GEMINI_API_KEY dan akses modelnya"
+    if code == 404:
+        return f"model '{_model()}' tidak ditemukan; atur GEMINI_MODEL ke model Gemini yang tersedia"
+    if code == 429:
+        return "kuota atau batas laju Gemini terlampaui (HTTP 429); coba lagi nanti"
+    return f"Gemini membalas HTTP {code}"
+
+
+def _chat(contents: list, tools: list | None, timeout: float, force_text: bool = False) -> dict:
+    """One generateContent call. Returns the model's content ({"role": "model", "parts": [...]}).
+    force_text keeps the tool declarations (the history contains function calls) but forbids new calls."""
+    body: dict = {"contents": contents, "generationConfig": {"temperature": 0.2}}
     if tools:
-        body["tools"] = tools
-    req = urllib.request.Request(_host() + "/api/chat", json.dumps(body).encode(), {"Content-Type": "application/json"})
+        body["tools"] = [{"functionDeclarations": tools}]
+        if force_text:
+            body["toolConfig"] = {"functionCallingConfig": {"mode": "NONE"}}
+    req = urllib.request.Request(f"{API_BASE}/models/{_model()}:generateContent", json.dumps(body).encode(),
+                                 {"Content-Type": "application/json", "x-goog-api-key": _api_key()})
     try:
         with urllib.request.urlopen(req, timeout=timeout) as r:
-            return json.loads(r.read())["message"]
+            data = json.loads(r.read())
     except urllib.error.HTTPError as e:
-        if e.code == 404:
-            raise RuntimeError(f"model '{_model()}' belum diunduh. Jalankan: ollama pull {_model()}") from None
-        raise RuntimeError(f"Ollama membalas HTTP {e.code}") from None
+        raise RuntimeError(_http_error(e.code)) from None
     except urllib.error.URLError as e:
-        raise RuntimeError(f"Ollama tidak terjangkau di {_host()} ({e.reason})") from None
+        raise RuntimeError(f"Gemini tidak terjangkau ({e.reason})") from None
+    cands = data.get("candidates") or []
+    if not cands:
+        fb = (data.get("promptFeedback") or {}).get("blockReason")
+        raise RuntimeError(f"Gemini tidak memberi jawaban{' (diblokir: ' + fb + ')' if fb else ''}")
+    content = cands[0].get("content") or {}
+    return {"role": "model", "parts": content.get("parts") or []}
 
 
 def _schema(name: str, desc: str, props: dict, req: list | None = None) -> dict:
-    return {"type": "function", "function": {"name": name, "description": desc, "parameters": {"type": "object", "properties": props, "required": req or []}}}
+    """A Gemini function declaration. Gemini rejects an empty parameters object, so it is left out when there are no properties."""
+    d: dict = {"name": name, "description": desc}
+    if props:
+        d["parameters"] = {"type": "object", "properties": props, **({"required": req} if req else {})}
+    return d
 
 
 TOOLS = [
@@ -203,32 +213,39 @@ def _facts(res: dict, q: str, tb: Toolbox) -> dict:
 
 
 def _gen(res: dict, q: str, tb: Toolbox, facts: dict, use_tools: bool, timeout: float) -> str:
-    """One question to the local model. With use_tools the model may call the toolbox for up to 3 rounds."""
+    """One question to Gemini. With use_tools the model may call the toolbox for up to 3 rounds."""
     prompt = PROMPT.format(q=q) + "\n\nData yang sudah diambil:\n" + json.dumps(facts, ensure_ascii=False, default=str)[:9000]
     if use_tools:
         prompt += "\n\nPakai alat hanya bila data di atas belum cukup."
-    msgs: list = [{"role": "user", "content": prompt}]
+    contents: list = [{"role": "user", "parts": [{"text": prompt}]}]
     allowed = {"summary", "list_findings", "get_finding", "cashier_profile", "cashier_breakdown"}
+    called = False
     for _ in range(3 if use_tools else 0):
-        m = _chat(msgs, TOOLS, timeout)
-        calls = m.get("tool_calls") or []
+        m = _chat(contents, TOOLS, timeout)
+        parts = m.get("parts") or []
+        calls = [p["functionCall"] for p in parts if p.get("functionCall")]
         if not calls:
-            if (m.get("content") or "").strip():
-                return m["content"].strip()
+            text = "".join(p.get("text", "") for p in parts if not p.get("thought")).strip()
+            if text:
+                return text
             break
-        msgs.append(m)
-        for c in calls:
-            fn = c.get("function", {})
-            name, args = fn.get("name", ""), fn.get("arguments") or {}
+        contents.append(m)  # keep the model turn exactly as returned (it may carry thought signatures)
+        replies = []
+        for fn in calls:
+            name, args = fn.get("name", ""), fn.get("args") or {}
             try:
                 out = getattr(tb, name)(**args) if name in allowed and isinstance(args, dict) else {"error": f"alat '{name}' tidak ada"}
             except TypeError as e:
                 out = {"error": str(e)}
-            msgs.append({"role": "tool", "content": json.dumps(out, ensure_ascii=False, default=str)[:6000]})
-    m = _chat(msgs, None, timeout)
-    if not (m.get("content") or "").strip():
+            raw = json.dumps(out, ensure_ascii=False, default=str)
+            replies.append({"functionResponse": {"name": name, "response": {"result": json.loads(raw) if len(raw) <= 6000 else raw[:6000]}}})
+        contents.append({"role": "user", "parts": replies})
+        called = True
+    m = _chat(contents, TOOLS if called else None, timeout, force_text=called)
+    text = "".join(p.get("text", "") for p in (m.get("parts") or []) if not p.get("thought")).strip()
+    if not text:
         raise RuntimeError("model memberi jawaban kosong")
-    return m["content"].strip()
+    return text
 
 
 def _model_answer(res: dict, q: str, tb: Toolbox) -> str:
@@ -291,7 +308,7 @@ def ask(res: dict, question: str) -> dict:
             ans = _pool.submit(_model_answer, res, q, tb).result(timeout=_timeout() * 2 + 10)
             return dict(answer=ans, source="asisten", steps=tb.log)
         except FutureTimeout:
-            note, why = "Asisten lengkap tidak merespons, memakai jawaban standar.", "TimeoutError (model lokal lambat; naikkan AGENT_TIMEOUT_SECONDS atau pakai model lebih kecil)"
+            note, why = "Asisten lengkap tidak merespons, memakai jawaban standar.", "TimeoutError (Gemini lambat; naikkan AGENT_TIMEOUT_SECONDS atau pakai model lebih ringan)"
         except Exception as exc:
             note, why = "Asisten lengkap sedang tidak tersedia, memakai jawaban standar.", f"{type(exc).__name__}: {str(exc)[:160]}"
         tb2 = Toolbox(res)

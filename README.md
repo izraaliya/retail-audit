@@ -38,7 +38,7 @@ Findings are ranked by score and rolled up into a risk score per cashier (the st
 
 ## Assistant
 
-The assistant is an agent with five read-only tools (`summary`, `list_findings`, `get_finding`, `cashier_profile`, `cashier_breakdown`). When a local Ollama model is running it decides which tools to call, answers in Indonesian citing finding ids and numbers, and every tool call is shown in the UI. Without Ollama, or if the call fails or times out, the same tools answer from fixed rules, so the page always works. It is told not to accuse anyone and not to recommend drastic actions. See "Asisten lokal (Ollama)" below.
+The assistant is an agent with five read-only tools (`summary`, `list_findings`, `get_finding`, `cashier_profile`, `cashier_breakdown`). When a `GEMINI_API_KEY` is set, a Gemini model decides which tools to call, answers in Indonesian citing finding ids and numbers, and every tool call is shown in the UI. Without a key, or if the call fails or times out, the same tools answer from fixed rules, so the page always works. It is told not to accuse anyone and not to recommend drastic actions. With a key, the question and the audit facts the tools return (finding ids, cashier ids and names, amounts) are sent to the Gemini API. See "Asisten Gemini" below.
 
 ## Data
 
@@ -77,10 +77,10 @@ Docker: `docker compose up --build`. Updating: `git pull origin main`, then rest
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `OLLAMA_HOST` | `http://localhost:11434` | Alamat server Ollama |
-| `OLLAMA_MODEL` | `qwen2.5:7b` | Model lokal untuk asisten (harus mendukung tool calling: qwen2.5, qwen3, llama3.1) |
+| `GEMINI_API_KEY` | none | API key Gemini untuk asisten (`GOOGLE_API_KEY` juga dikenali). Tanpa key, jawaban standar dipakai |
+| `GEMINI_MODEL` | `gemini-3.5-flash` | Model Gemini yang dipakai (harus mendukung function calling) |
 | `AGENT_TIMEOUT_SECONDS` | `90` | Tunggu per percobaan sebelum memakai jawaban standar |
-| `ASSISTANT_MODE` | none | Isi `rules` untuk mematikan model dan selalu memakai jawaban standar |
+| `ASSISTANT_MODE` | none | Isi `rules` untuk mematikan Gemini dan selalu memakai jawaban standar |
 
 ## API
 
@@ -97,15 +97,17 @@ Docs at `/docs`. `POST /api/analyze` (files, `discount_limit`), `POST /api/analy
 - Without cashier, approval and timestamp columns, the corresponding checks do not run.
 - Results are kept in memory for one hour.
 
-## Asisten lokal (Ollama)
+## Asisten Gemini
 
-Asisten berjalan di komputer sendiri, tanpa API key dan tanpa data keluar.
+Asisten memakai Gemini API. Buat API key di https://aistudio.google.com/apikey, lalu:
 
 ```bash
-# 1. pasang Ollama dari https://ollama.com (Windows: installer, lalu otomatis jalan)
-ollama pull qwen2.5:7b
-# 2. jalankan aplikasi seperti biasa
+cp .env.example .env        # isi GEMINI_API_KEY di file .env
 uvicorn app.main:app --reload
 ```
 
-Data kasir dan temuan diambil dulu, lalu model boleh memanggil 5 alat baca-saja (maksimal 3 putaran). Jika gagal, dicoba lagi sekali tanpa alat. Jika Ollama mati atau model belum diunduh, jawaban standar tampil dengan "penyebab teknis". Dengan Docker, arahkan `OLLAMA_HOST=http://host.docker.internal:11434`.
+Di Windows PowerShell: `$env:GEMINI_API_KEY="..."` sebelum menjalankan `uvicorn`. Dengan Docker, `docker compose up --build` membaca `.env` otomatis.
+
+Data kasir dan temuan diambil dulu, lalu model boleh memanggil 5 alat baca-saja (maksimal 3 putaran). Jika gagal, dicoba lagi sekali tanpa alat. Jika key kosong, salah, kuota habis, atau Gemini tidak terjangkau, jawaban standar tampil dengan "penyebab teknis" (key tidak pernah ditampilkan). Jika nama model sudah tidak tersedia, ganti `GEMINI_MODEL`.
+
+**Privasi:** saat key diisi, pertanyaan dan hasil alat (id temuan, id dan nama kasir, nilai rupiah, nama produk) dikirim ke Gemini API. Isi `ASSISTANT_MODE=rules` bila data tidak boleh keluar dari komputer.

@@ -1,4 +1,5 @@
 import io
+import json
 import time
 from pathlib import Path
 
@@ -199,27 +200,86 @@ def test_model_path_prefetches_and_falls_back_to_plain_call(res, monkeypatch):
     assert a["answer"] == "jawaban dari model" and a["source"] == "asisten" and calls == [True, False]
 
 
-def test_ollama_tool_loop_and_errors(res, monkeypatch):
+def _call(name, **args):
+    return {"role": "model", "parts": [{"functionCall": {"name": name, "args": args}}]}
+
+
+def _say(text):
+    return {"role": "model", "parts": [{"text": text}]}
+
+
+def test_gemini_tool_loop_and_errors(res, monkeypatch):
     tb = agent.Toolbox(res)
-    seq = [
-        {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "cashier_breakdown", "arguments": {"cashier_id": "K17", "metric": "refund"}}}]},
-        {"role": "assistant", "content": "Wulan: SKU teratas sudah dicek."},
-    ]
+    seq = [_call("cashier_breakdown", cashier_id="K17", metric="refund"), _say("Wulan: SKU teratas sudah dicek.")]
     sent = []
-    monkeypatch.setattr(agent, "_chat", lambda msgs, tools, timeout: (sent.append(len(msgs)), seq.pop(0))[1])
+    monkeypatch.setattr(agent, "_chat", lambda contents, tools, timeout, force_text=False: (sent.append((len(contents), force_text)), seq.pop(0))[1])
     out = agent._gen(res, "wulan di sku apa", tb, {"x": 1}, True, 5)
-    assert out.startswith("Wulan") and sent == [1, 3] and tb.log[-1]["tool"] == "cashier_breakdown"
-    monkeypatch.setattr(agent, "_chat", lambda *a: {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "hapus_semua", "arguments": {}}}]})
-    monkeypatch.setattr(agent, "_chat", lambda msgs, tools, timeout: {"role": "assistant", "content": "ok"} if tools is None else {"role": "assistant", "content": "", "tool_calls": [{"function": {"name": "hapus_semua", "arguments": {}}}]})
+    assert out.startswith("Wulan") and sent == [(1, False), (3, False)] and tb.log[-1]["tool"] == "cashier_breakdown"
+    seen = []
+
+    def fake(contents, tools, timeout, force_text=False):
+        seen.append(contents[-1])
+        return _say("ok") if force_text else _call("hapus_semua")
+
+    monkeypatch.setattr(agent, "_chat", fake)
     assert agent._gen(res, "x", tb, {}, True, 5) == "ok"
+    reply = [p["functionResponse"] for c in seen for p in c["parts"] if "functionResponse" in p][0]
+    assert reply["name"] == "hapus_semua" and "tidak ada" in reply["response"]["result"]["error"]
 
 
-def test_ollama_down_reports_cause(res, monkeypatch):
-    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:1")
-    monkeypatch.setattr(agent, "enabled", lambda: True)
-    a = agent.ask(res, "ringkas")
-    assert a["source"] == "aturan" and "penyebab teknis" in a["answer"] and "Ollama tidak terjangkau" in a["answer"]
-    monkeypatch.undo()
-    monkeypatch.setenv("OLLAMA_HOST", "http://127.0.0.1:1")
-    agent._probe["t"] = 0
+def test_gemini_request_shape_and_empty_parameters(res, monkeypatch):
+    summary = next(t for t in agent.TOOLS if t["name"] == "summary")
+    assert "parameters" not in summary
+    gf = next(t for t in agent.TOOLS if t["name"] == "get_finding")
+    assert gf["parameters"]["required"] == ["finding_id"]
+    monkeypatch.setenv("GEMINI_API_KEY", "k-test")
+    monkeypatch.setenv("GEMINI_MODEL", "gemini-x")
+    captured = {}
+
+    class R:
+        def __enter__(self): return self
+        def __exit__(self, *a): return False
+        def read(self): return b'{"candidates":[{"content":{"role":"model","parts":[{"text":"hai"}]}}]}'
+
+    def fake_urlopen(req, timeout):
+        captured.update(url=req.full_url, headers={k.lower(): v for k, v in req.header_items()}, body=json.loads(req.data))
+        return R()
+
+    monkeypatch.setattr(agent.urllib.request, "urlopen", fake_urlopen)
+    m = agent._chat([{"role": "user", "parts": [{"text": "q"}]}], agent.TOOLS, 5, force_text=True)
+    assert m["parts"][0]["text"] == "hai"
+    assert captured["url"].endswith("/models/gemini-x:generateContent") and "k-test" not in captured["url"]
+    assert captured["headers"]["x-goog-api-key"] == "k-test"
+    assert captured["body"]["toolConfig"]["functionCallingConfig"]["mode"] == "NONE"
+    assert len(captured["body"]["tools"][0]["functionDeclarations"]) == 5
+
+
+def test_gemini_enabled_depends_on_key(monkeypatch):
+    for k in ("GEMINI_API_KEY", "GOOGLE_API_KEY", "ASSISTANT_MODE"):
+        monkeypatch.delenv(k, raising=False)
     assert agent.enabled() is False
+    monkeypatch.setenv("GEMINI_API_KEY", "k-test")
+    assert agent.enabled() is True
+    monkeypatch.setenv("ASSISTANT_MODE", "rules")
+    assert agent.enabled() is False
+
+
+@pytest.mark.parametrize("code,needle", [(403, "GEMINI_API_KEY"), (404, "GEMINI_MODEL"), (429, "kuota")])
+def test_gemini_http_errors_report_cause_without_leaking_key(res, monkeypatch, code, needle):
+    import urllib.error
+    monkeypatch.setenv("GEMINI_API_KEY", "rahasia-123")
+
+    def boom(req, timeout):
+        raise urllib.error.HTTPError(req.full_url, code, "x", {}, None)
+
+    monkeypatch.setattr(agent.urllib.request, "urlopen", boom)
+    a = agent.ask(res, "ringkas")
+    assert a["source"] == "aturan" and "penyebab teknis" in a["answer"] and needle in a["answer"] and "rahasia-123" not in a["answer"]
+
+
+def test_gemini_unreachable_reports_cause(res, monkeypatch):
+    import urllib.error
+    monkeypatch.setenv("GEMINI_API_KEY", "k-test")
+    monkeypatch.setattr(agent.urllib.request, "urlopen", lambda req, timeout: (_ for _ in ()).throw(urllib.error.URLError("dns")))
+    a = agent.ask(res, "ringkas")
+    assert a["source"] == "aturan" and "Gemini tidak terjangkau" in a["answer"]
