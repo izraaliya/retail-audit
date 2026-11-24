@@ -292,15 +292,16 @@ const rp = n => "Rp " + Math.round(n).toLocaleString("id-ID");
 const rpShort = n => n >= 1e9 ? "Rp " + (n / 1e9).toLocaleString("id-ID", {maximumFractionDigits: 2}) + " M" : n >= 1e6 ? "Rp " + (n / 1e6).toLocaleString("id-ID", {maximumFractionDigits: 1}) + " jt" : rp(n);
 let files = [], D = null, MODE = null;
 const RL = {refund_tanpa_order: "Refund tanpa order asal", refund_sebelum_order: "Refund sebelum order dibuat", refund_terlambat: "Refund terlalu lama setelah order", refund_melebihi_order: "Refund lebih besar dari belanjanya",
-  struk_ganda: "Struk kembar", integritas_data: "Angka struk tidak cocok", angka_mustahil: "Angka tidak masuk akal", nilai_tidak_wajar: "Nilai struk janggal", harga_tidak_cocok: "Harga beda dari master", id_ganda: "Nomor order ganda"};
+  struk_ganda: "Struk kembar", pelanggan_tidak_dikenal: "ID pelanggan tidak terdaftar", pelanggan_refund_sering: "Pelanggan sering refund", integritas_data: "Angka struk tidak cocok", angka_mustahil: "Angka tidak masuk akal", nilai_tidak_wajar: "Nilai struk janggal", harga_tidak_cocok: "Harga beda dari master", id_ganda: "Nomor order ganda"};
 const MODES = {
   kasir: {pill: "Audit Kasir", cls: "", title: "Siapa kasir yang beda dari rekan-rekannya?", lede: "Unggah data penjualan, refund, dan kas. Tiap kasir dibandingkan dengan rekan-rekannya, lalu kita tunjukkan siapa yang perlu dilihat lagi, lengkap dengan baris data sebagai buktinya.",
     hint: "Tidak ada aturan yang perlu diatur. Setiap kasir dan toko dibandingkan dengan rekan-rekannya, lalu yang polanya paling beda ditandai.", tables: ["orders", "items", "refunds", "cash", "employees", "stores", "skus", "opname"],
     unlock: {orders: "Dasar semua pemeriksaan: diskon, void, jam transaksi, kasir vs rekan", items: "Struk kembar berturutan", refunds: "Refund berlebihan, tanpa order, disetujui sendiri, terlambat", cash: "Selisih kas pada penutupan",
       employees: "Nama kasir di laporan (bukan sekadar kode)", stores: "Transaksi di luar jam buka dan nama toko", skus: "Harga pokok untuk nilai susut stok", opname: "Susut stok per toko dan produk"}},
   order: {pill: "Audit Data Order", cls: "o", title: "Adakah data order yang salah atau mencurigakan?", lede: "Unggah data order. Kita periksa transaksinya sendiri: angka yang tidak cocok, struk kembar, refund yang janggal, dan harga yang menyimpang, tanpa melihat siapa kasirnya.",
-    hint: "Tidak ada aturan yang perlu diatur. Setiap transaksi diperiksa konsistensinya dan dicari yang menyimpang dari kebiasaan.", tables: ["orders", "items", "refunds", "skus"],
-    unlock: {orders: "Dasar audit: total tidak cocok, angka tidak masuk akal, nilai struk janggal, nomor order ganda", items: "Subtotal tidak cocok dengan isi struk, struk kembar", refunds: "Refund tanpa order, sebelum order, atau lebih besar dari belanjanya", skus: "Harga di struk berbeda dari harga master"}}
+    hint: "Tidak ada aturan yang perlu diatur. Setiap transaksi diperiksa konsistensinya dan dicari yang menyimpang dari kebiasaan.", tables: ["orders", "items", "refunds", "skus", "customers"],
+    unlock: {orders: "Dasar audit: total tidak cocok, angka tidak masuk akal, nilai struk janggal, nomor order ganda", items: "Subtotal tidak cocok dengan isi struk, struk kembar", refunds: "Refund tanpa order, sebelum order, atau lebih besar dari belanjanya", skus: "Harga di struk berbeda dari harga master",
+      customers: "ID pelanggan yang tidak terdaftar dan pelanggan yang terlalu sering refund"}}
 };
 
 function el(tag, props = {}, ...kids) {
@@ -351,7 +352,7 @@ async function inspectFiles() {
 }
 function chips() { paint(); inspectFiles(); }
 const TICK = '<svg width="12" height="12" viewBox="0 0 12 12"><path d="M2 6.3l2.6 2.6L10 3.4" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>';
-const KL = {orders: "Order", items: "Item order", refunds: "Refund", cash: "Setoran kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Stok opname"};
+const KL = {orders: "Order", items: "Item order", refunds: "Refund", cash: "Setoran kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Stok opname", customers: "Pelanggan"};
 function paint() {
   const found = INSP ? INSP.found : {}, dup = INSP ? INSP.duplicates : {};
   $("chips").replaceChildren(...files.map((f, i) => {
@@ -427,7 +428,7 @@ function memoOrder() {
     const steps = []; fs.slice(0, 5).forEach(f => { if (f.steps[0] && !steps.includes(f.steps[0])) steps.push(f.steps[0]); });
     if (steps.length) body.append(el("h3", {text: "Yang sebaiknya dikerjakan lebih dulu"}), el("ol", {class: "actions"}, ...steps.map(x => el("li", {text: x}))));
   }
-  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname"};
+  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname", customers: "Pelanggan"};
   const t = (v, l) => el("div", {class: "tally"}, el("b", {text: v}), el("span", {text: l}));
   $("mSide").replaceChildren(t(String(sv.Tinggi), "temuan tinggi"), t(String(sv.Sedang + sv.Rendah), "temuan sedang dan rendah"), t(fmt(rows), "baris bukti"),
     el("div", {class: "label", text: "DATA DIBACA"}), el("p", {class: "small", text: Object.keys(D.detected_files).map(x => names[x]).join(", ")}), ...(m.warnings || []).map(w => el("div", {class: "warn", text: w})));
@@ -450,7 +451,7 @@ function memo() {
   if (other.length) body.append(el("p", {text: "Di luar kasir: " + other.map(f => f.title + " (" + f.subject_name + ")").join("; ") + "."}));
   const steps = []; D.findings.slice(0, 5).forEach(f => { if (f.steps[0] && !steps.includes(f.steps[0])) steps.push(f.steps[0]); });
   if (steps.length) body.append(el("h3", {text: "Yang sebaiknya dikerjakan lebih dulu"}), el("ol", {class: "actions"}, ...steps.map(s => el("li", {text: s}))));
-  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname"};
+  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname", customers: "Pelanggan"};
   const t = (v, l) => el("div", {class: "tally"}, el("b", {text: v}), el("span", {text: l}));
   $("mSide").replaceChildren(t(String(sv.Tinggi), "temuan tinggi"), t(String(sv.Sedang + sv.Rendah), "temuan sedang dan rendah"), t(rpShort(k.amount), "nilai yang perlu ditelusuri"),
     el("div", {class: "label", text: "DATA DIBACA"}), el("p", {class: "small", text: Object.keys(D.detected_files).map(x => names[x]).join(", ")}), ...(m.warnings || []).map(w => el("div", {class: "warn", text: w})));

@@ -19,9 +19,10 @@ REQUIRED = {
     "stores": ["store_id", "store_name"],
     "skus": ["sku", "name", "price", "unit_cost"],
     "opname": ["store_id", "sku", "system_qty", "counted_qty"],
+    "customers": ["customer_id", "nama", "member_tier"],
 }
 LABELS = {"orders": "Order", "items": "Item order", "refunds": "Refund", "cash": "Setoran kas", "employees": "Karyawan",
-          "stores": "Toko", "skus": "SKU", "opname": "Stok opname"}
+          "stores": "Toko", "skus": "SKU", "opname": "Stok opname", "customers": "Pelanggan"}
 MANDATORY = ["orders"]
 AUDITS = ("kasir", "order")
 # which audit a rule belongs to: "kasir" = how each cashier behaves compared with peers, "order" = errors, oddities and fraud signs in the order data itself
@@ -30,9 +31,10 @@ RULE_AUDITS = {
     "selisih_kas": ["kasir"], "luar_jam_buka": ["kasir"], "void_tinggi": ["kasir"], "pola_tidak_biasa": ["kasir"], "susut_stok": ["kasir"],
     "refund_tanpa_order": ["kasir", "order"], "refund_sebelum_order": ["kasir", "order"], "refund_terlambat": ["kasir", "order"], "struk_ganda": ["kasir", "order"],
     "integritas_data": ["order"], "id_ganda": ["order"], "angka_mustahil": ["order"], "nilai_tidak_wajar": ["order"], "harga_tidak_cocok": ["order"],
-    "refund_melebihi_order": ["order"],
+    "refund_melebihi_order": ["order"], "pelanggan_tidak_dikenal": ["order"], "pelanggan_refund_sering": ["order"],
 }
-DETECT_ORDER = ["orders", "refunds", "cash", "opname", "employees", "skus", "stores", "items"]
+DETECT_ORDER = ["orders", "refunds", "cash", "opname", "customers", "employees", "skus", "stores", "items"]
+GUEST_IDS = {"", "GUEST", "WALKIN", "UMUM", "NON-MEMBER", "-", "NAN"}   # customer ids that mean "not a member"
 
 
 class DataError(ValueError):
@@ -95,6 +97,8 @@ def clean(t: dict[str, pd.DataFrame]) -> tuple[dict, list[str]]:
         o = o.dropna(subset=["datetime"])
     for c in ("order_id", "store_id", "cashier_id"):
         o[c] = o[c].astype(str).str.strip()
+    if "customer_id" in o.columns:
+        o["customer_id"] = o.customer_id.fillna("").astype(str).str.strip()
     for c in ("subtotal", "discount", "total"):
         o[c] = pd.to_numeric(o[c], errors="coerce").fillna(0)
     for c, d in (("voided", 0),):
@@ -109,10 +113,10 @@ def clean(t: dict[str, pd.DataFrame]) -> tuple[dict, list[str]]:
     if len(o) < 200:
         raise DataError(f"Data order hanya {len(o)} baris. Minimal 200 agar pola kasir bisa dibandingkan.")
     out = {"orders": o}
-    for k in ("items", "refunds", "cash", "employees", "stores", "skus", "opname"):
+    for k in ("items", "refunds", "cash", "employees", "stores", "skus", "opname", "customers"):
         if k in t:
             d = t[k].copy()
-            for c in ("store_id", "cashier_id", "order_id", "sku", "employee_id", "approved_by"):
+            for c in ("store_id", "cashier_id", "order_id", "sku", "employee_id", "approved_by", "customer_id"):
                 if c in d.columns:
                     d[c] = d[c].fillna("").astype(str).str.strip()
             if "datetime" in d.columns:
@@ -163,7 +167,7 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
         for c, g in miss.groupby("cashier_id"):
             add("refund_tanpa_order", c, f"{len(g)} refund tidak punya order asal",
                 f"Refund merujuk order_id yang tidak ada di data order, total {_rp(g.amount.sum())}. Bisa refund fiktif atau salah input.",
-                55 + min(40, 6 * len(g)), g, ["refund_id", "order_id", "datetime", "sku", "amount", "approved_by"], g.amount.sum(), len(g), 0)
+                55 + min(40, 6 * len(g)), g, ["refund_id", "order_id", "datetime", "customer_id", "sku", "amount", "approved_by"], g.amount.sum(), len(g), 0)
         m = rf.merge(o[["order_id", "datetime"]].rename(columns={"datetime": "order_time"}), on="order_id")
         early = m[m.datetime < m.order_time]
         late = m[(m.datetime - m.order_time).dt.days > P.refund_window_days]
@@ -241,7 +245,7 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
             if len(g) >= 5 and zd[c] >= P.min_z:
                 add("struk_ganda", c, f"{len(g)} struk kembar berturutan",
                     f"Struk dengan isi dan total sama diproses ulang dalam {P.dup_minutes} menit ({_pct(drate_[c], 2)} dari order, rekan kerja median {_pct(drate_.median(), 2)}). Nilai {_rp(g.total.sum())}.",
-                    40 + 7 * zd[c], g, ["order_id", "datetime", "total", "payment_method"], g.total.sum(), round(drate_[c], 2), round(drate_.median(), 2))
+                    40 + 7 * zd[c], g, ["order_id", "datetime", "customer_id", "total", "payment_method"], g.total.sum(), round(drate_[c], 2), round(drate_.median(), 2))
     vrate = o.groupby("cashier_id").voided.mean().reindex(cashiers) * 100
     z = robust_z(vrate)
     for c in cashiers:
@@ -263,7 +267,7 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
         top = mism.cashier_id.value_counts()
         add("integritas_data", "Integritas data", f"{len(mism)} struk dengan angka yang tidak konsisten",
             f"Total tidak sama dengan subtotal dikurangi diskon, atau subtotal tidak sama dengan jumlah item. Selisih total {_rp(mism.selisih.abs().sum())}. Terbanyak pada kasir {', '.join(f'{emp_name.get(k, k)} ({v})' for k, v in top.head(3).items())}.",
-            40 + min(35, 3 * len(mism)), mism, ["order_id", "datetime", "cashier_id", "subtotal", "discount", "total", "selisih"], mism.selisih.abs().sum(), len(mism), 0, kind="data")
+            40 + min(35, 3 * len(mism)), mism, ["order_id", "datetime", "cashier_id", "customer_id", "subtotal", "discount", "total", "selisih"], mism.selisih.abs().sum(), len(mism), 0, kind="data")
 
     # ---------------------------------------------------------------- order-data checks (audit "order")
     ro = raw["orders"]
@@ -284,7 +288,7 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
         add("angka_mustahil", "Data order", f"{len(imp)} struk dengan angka yang tidak masuk akal",
             f"Nilai negatif atau diskon melebihi subtotal. Bisa salah input, retur yang dicatat sebagai penjualan, atau manipulasi angka. Terbanyak pada kasir "
             + ", ".join(f"{emp_name.get(k, k)} ({v})" for k, v in imp.cashier_id.value_counts().head(3).items()) + ".",
-            55 + min(40, 5 * len(imp)), imp, ["order_id", "datetime", "cashier_id", "subtotal", "discount", "total", "alasan"], imp.total.abs().sum(), len(imp), 0, kind="data")
+            55 + min(40, 5 * len(imp)), imp, ["order_id", "datetime", "cashier_id", "customer_id", "subtotal", "discount", "total", "alasan"], imp.total.abs().sum(), len(imp), 0, kind="data")
 
     pos = o_ok[o_ok.total > 0].copy()
     if len(pos):
@@ -294,7 +298,7 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
         if len(big):
             add("nilai_tidak_wajar", "Data order", f"{len(big)} struk bernilai jauh di atas kebiasaan tokonya",
                 f"Nilai struk setidaknya 5 kali median tokonya dan sangat jauh dari sebaran normal. Bisa pembelian besar yang sah atau salah ketik angka. Total {_rp(big.total.sum())}.",
-                30 + min(45, 6 * len(big)), big, ["order_id", "datetime", "store_id", "cashier_id", "total", "median_toko"], big.total.sum(), len(big), 0, kind="data")
+                30 + min(45, 6 * len(big)), big, ["order_id", "datetime", "store_id", "cashier_id", "customer_id", "total", "median_toko"], big.total.sum(), len(big), 0, kind="data")
 
     if "items" in t and "skus" in t:
         it = t["items"].merge(t["skus"][["sku", "name", "price"]].rename(columns={"name": "produk", "price": "harga_master"}), on="sku", how="inner")
@@ -317,6 +321,34 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
             add("refund_melebihi_order", "Data order", f"{len(over)} order di-refund lebih besar dari nilainya",
                 f"Total refund lebih besar dari nilai belanja order asalnya (sebelum diskon), selisih {_rp(over.kelebihan.sum())}. Mustahil terjadi pada refund yang wajar: bisa refund ganda, salah input, atau refund fiktif.",
                 55 + min(40, 6 * len(over)), over, ["order_id", "datetime", "cashier_id", "subtotal", "total_refund", "kelebihan"], over.kelebihan.sum(), len(over), 0, kind="data")
+
+    cu = t.get("customers")
+    if "customer_id" in o.columns and cu is not None and len(cu):
+        names = dict(zip(cu.customer_id, cu.nama))
+        member = ~o.customer_id.str.upper().isin(GUEST_IDS)
+        unk = o[member & ~o.customer_id.isin(set(cu.customer_id))]
+        if len(unk):
+            add("pelanggan_tidak_dikenal", "Data order", f"{len(unk)} order memakai ID pelanggan yang tidak terdaftar",
+                f"ID pelanggan di struk tidak ada di master pelanggan ({unk.customer_id.nunique()} ID berbeda, tersebar di {unk.cashier_id.nunique()} kasir). Bisa salah ketik, pelanggan fiktif untuk mengejar poin atau diskon, atau master belum diperbarui. Nilai {_rp(unk.total.sum())}.",
+                35 + min(45, 2 * len(unk)), unk, ["order_id", "datetime", "store_id", "cashier_id", "customer_id", "total"], unk.total.sum(), len(unk), 0, kind="data")
+        if rf is not None and len(rf):
+            rc = rf.drop(columns=["customer_id"], errors="ignore").merge(o[["order_id", "customer_id"]], on="order_id", how="inner")
+            rc = rc[~rc.customer_id.str.upper().isin(GUEST_IDS)]
+            cnt = rc.groupby("customer_id").size()
+            n_cust_orders = o[member].groupby("customer_id").size()
+            overall = float(len(rc) / max(int(member.sum()), 1) * 100)
+            for cid, n_ in cnt[cnt >= 6].sort_values(ascending=False).items():
+                rate = n_ / max(int(n_cust_orders.get(cid, n_)), 1) * 100
+                if rate < max(20.0, 5 * overall):
+                    continue
+                g = rc[rc.customer_id == cid].sort_values("datetime")
+                by = g.cashier_id.value_counts()
+                top_c, top_n = by.index[0], int(by.iloc[0])
+                label = f"{cid} ({names[cid]})" if cid in names else cid
+                add("pelanggan_refund_sering", label, f"Pelanggan {label} melakukan {int(n_)} refund",
+                    f"{int(n_)} refund dari {int(n_cust_orders.get(cid, n_))} order pelanggan ini ({_pct(rate, 0)}), padahal rata-rata semua pelanggan hanya {_pct(overall)}. {top_n} refund diproses kasir {emp_name.get(top_c, top_c)} ({_pct(top_n / n_ * 100, 0)}). Total nilai {_rp(g.amount.sum())}. Pola ini bisa berarti pelanggan dan kasir bekerja sama, atau pelanggan yang menyalahgunakan kebijakan refund.",
+                    45 + min(40, 3 * int(n_)) + (10 if top_n / n_ >= 0.7 else 0), g, ["refund_id", "order_id", "datetime", "cashier_id", "amount", "reason", "approved_by"],
+                    g.amount.sum(), round(rate, 1), round(overall, 1), kind="data")
 
     # ---------------------------------------------------------------- R10 stock shrinkage
     op = t.get("opname")

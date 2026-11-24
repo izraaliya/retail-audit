@@ -3,10 +3,11 @@
 No public dataset has cashier, discount, void, refund-approval and cash-closing fields together (real POS fraud data is
 confidential), so this one is synthetic. Writes to sample_data/:
   Data_Order_Lengkap.xlsx   Order, Item, Refund, Setoran_Kas
-  Data_Master.xlsx          Karyawan, Toko, SKU, Opname
+  Data_Master.xlsx          Karyawan, Toko, SKU, Opname, Pelanggan
   Label_Anomali.csv         ground truth of what was planted (for evaluating the detector; NOT uploaded to the app)
 Run: python scripts/generate_sample_data.py
 """
+import zlib
 import numpy as np
 import pandas as pd
 from pathlib import Path
@@ -170,16 +171,96 @@ ord_df.loc[bad_ix, "total"] = ord_df.loc[bad_ix, "total"] - 25000
 for o in ord_df.loc[bad_ix, "order_id"]:
     labels.append((o, "order", ord_df.set_index("order_id").cashier_id[o], "total_tidak_cocok"))
 
+# ---- richer detail (customers, channel, voucher, tax, product names ...). A separate generator (rng2) is used so the
+# columns above, and therefore the planted cashier schemes, are exactly the same as before.
+rng2 = np.random.default_rng(2026)
+CITY = {"ST01": "Jakarta", "ST02": "Jakarta", "ST03": "Surabaya", "ST04": "Bandung", "ST05": "Yogyakarta", "ST06": "Medan"}
+FIRST = ["Adinda", "Agung", "Ahmad", "Aisyah", "Alya", "Anisa", "Arief", "Bagas", "Bayu", "Citra", "Dedi", "Dian", "Eka", "Farhan", "Fitri", "Gita", "Hana", "Indra",
+         "Intan", "Jihan", "Kevin", "Laras", "Mega", "Naufal", "Novi", "Okta", "Pratiwi", "Qori", "Rahmat", "Salsa", "Tari", "Umar", "Vina", "Wahyu", "Yuni", "Zahra", "Bintang", "Cahya", "Dwi", "Elsa"]
+LAST = ["Pratama", "Saputra", "Wijaya", "Lestari", "Hidayat", "Kusuma", "Nugroho", "Rahayu", "Santoso", "Setiawan", "Utami", "Wibowo", "Permata", "Maharani", "Firmansyah",
+        "Ramadhan", "Anggraini", "Susanto", "Hakim", "Gunawan", "Halim", "Siregar", "Nasution", "Simanjuntak", "Harahap", "Purnama", "Kurniawan", "Suryani", "Yulianti", "Aditya"]
+N_CUST = 1600
+home = rng2.choice(stores.store_id, size=N_CUST, p=(stores.scale / stores.scale.sum()).to_numpy())
+nm1, nm2 = rng2.choice(FIRST, N_CUST), rng2.choice(LAST, N_CUST)
+tier = rng2.choice(["Reguler", "Silver", "Gold", "Platinum"], N_CUST, p=[0.55, 0.28, 0.13, 0.04])
+reg = pd.Timestamp("2023-01-01") + pd.to_timedelta(rng2.integers(0, 1350, N_CUST), unit="D")
+customers = pd.DataFrame({
+    "customer_id": [f"C{i + 1:05d}" for i in range(N_CUST)],
+    "nama": [f"{a} {b}" for a, b in zip(nm1, nm2)],
+    "jenis_kelamin": rng2.choice(["P", "L"], N_CUST, p=[0.9, 0.1]),
+    "tanggal_lahir": (pd.Timestamp("2009-01-01") - pd.to_timedelta(rng2.integers(0, 365 * 38, N_CUST), unit="D")).date,
+    "no_hp": [f"08{rng2.choice(['12', '13', '21', '52', '57', '78', '81', '85'])}-{x // 10**4:04d}-{x % 10**4:04d}" for x in rng2.integers(0, 10**8, N_CUST)],
+    "email": [f"{a.lower()}.{b.lower()}{i % 97}@example.com" for i, (a, b) in enumerate(zip(nm1, nm2))],
+    "kota": [CITY[h] for h in home], "toko_langganan": home, "member_tier": tier, "tanggal_daftar": reg.date,
+})
+pool = {sid: customers.customer_id[home == sid].to_numpy() for sid in stores.store_id}
+weights = {sid: (lambda w: w / w.sum())(rng2.gamma(0.6, size=len(v))) for sid, v in pool.items()}
+cust = np.full(len(ord_df), "GUEST", dtype=object)
+for sid in stores.store_id:
+    ix = np.where(ord_df.store_id.to_numpy() == sid)[0]
+    mem = ix[rng2.random(len(ix)) < 0.62]
+    cust[mem] = rng2.choice(pool[sid], size=len(mem), p=weights[sid])
+ord_df["customer_id"] = cust
+# planted: three customers who get most of K02's inflated refunds (a possible cashier-customer collusion)
+k02_refund_orders = refund_df[refund_df.refund_id.isin([l[0] for l in labels if l[3] == "refund_berlebihan"])].order_id.tolist()
+colluders = rng2.choice(pool["ST01"], size=3, replace=False)
+pick = rng2.choice(len(k02_refund_orders), size=int(len(k02_refund_orders) * 0.7), replace=False)
+for j, ix in enumerate(pick):
+    ord_df.loc[ord_df.order_id == k02_refund_orders[ix], "customer_id"] = colluders[j % 3]
+for c_ in colluders:
+    labels.append((c_, "pelanggan", "", "pelanggan_refund_sering"))
+# planted: orders carrying a customer id that is not in the customer master
+unk = ord_df[(ord_df.voided == 0) & (ord_df.customer_id == "GUEST")].sample(25, random_state=11).index
+ord_df.loc[unk, "customer_id"] = [f"C9{int(x):04d}" for x in rng2.integers(0, 9999, len(unk))]
+for o_ in ord_df.loc[unk, "order_id"]:
+    labels.append((o_, "order", "", "pelanggan_tidak_dikenal"))
+
+member = ord_df.customer_id != "GUEST"
+pct = (ord_df.discount / ord_df.subtotal * 100).round().fillna(0).astype(int)
+ord_df["channel"] = rng2.choice(["Toko", "Click & Collect", "Pesan Antar"], len(ord_df), p=[0.86, 0.08, 0.06])
+ord_df["voucher_code"] = np.where(ord_df.discount > 0, pct.map({5: "MEMBER5", 10: "PROMO10", 15: "SALE15"}).fillna(""), "")
+ord_df["payment_ref"] = [("" if p_ == "cash" else f"TRX{x:010d}") for p_, x in zip(ord_df.payment_method, rng2.integers(0, 10**10, len(ord_df)))]
+ord_df["jumlah_item"] = ord_df.order_id.map(item_df.groupby("order_id").qty.sum()).fillna(0).astype(int)
+ord_df["ppn"] = (ord_df.total * 11 / 111).round().astype(int)          # 11% VAT, already included in total
+ord_df["poin_didapat"] = np.where(member & (ord_df.voided == 0), (ord_df.total.clip(lower=0) // 10000), 0).astype(int)
+ord_df["void_reason"] = np.where(ord_df.voided == 1, rng2.choice(["salah input produk", "pelanggan batal", "salah metode bayar", "kesalahan kasir"], len(ord_df)), "")
+
+# items: product name, category, brand and line total
+sku_x = skus.set_index("sku")
+item_df["nama_produk"] = item_df.sku.map(sku_x.name)
+item_df["kategori"] = item_df.sku.map(sku_x.category)
+item_df["brand"] = item_df.sku.map(lambda k: "Lumina Skin" if k.startswith("SK") else "Velvet Muse")
+item_df["line_total"] = item_df.qty * item_df.unit_price
+# refunds: customer and how the money went back
+okey = ord_df.set_index("order_id")
+refund_df.insert(5, "customer_id", refund_df.order_id.map(okey.customer_id).fillna(""))
+refund_df["refund_method"] = refund_df.order_id.map(okey.payment_method).map({"cash": "tunai", "qris": "kembali_ke_qris", "debit": "kembali_ke_kartu", "kartu_kredit": "kembali_ke_kartu"}).fillna("tunai")
+# master data detail
+skus["brand"] = skus.sku.map(lambda k: "Lumina Skin" if k.startswith("SK") else "Velvet Muse")
+skus["barcode"] = ["899" + f"{zlib.crc32(k.encode()) % 10**10:010d}" for k in skus.sku]
+skus["supplier"] = skus.sku.map(lambda k: "PT Lumina Kosmetik Nusantara" if k.startswith("SK") else "PT Velvet Muse Indonesia")
+skus["status"] = "Aktif"
+stores_x = stores.assign(kota=stores.store_id.map(CITY), alamat=["Jl. Boulevard Raya 12, Grand Mall Lt.2", "Jl. Jend. Sudirman Kav. 52, SCBD Lt.1", "Jl. Ahmad Yani 163, Galaxy Mall Lt.1",
+    "Jl. Ir. H. Juanda 88, Dago", "Jl. Malioboro 54", "Jl. Gatot Subroto 30A, Sun Plaza Lt.2"], telepon=["021-5550101", "021-5550102", "031-5550103", "022-5550104", "0274-5550105", "061-5550106"],
+    manajer_id=stores.store_id.map(mgr), tanggal_buka=["2022-03-01", "2022-08-15", "2023-01-10", "2023-06-01", "2024-02-20", "2024-09-05"])
+employees_x = employees.assign(
+    tanggal_masuk=(pd.Timestamp("2021-01-01") + pd.to_timedelta(rng2.integers(0, 1700, len(employees)), unit="D")).date,
+    status_kerja=np.where(employees.peran == "Manajer", "Tetap", rng2.choice(["Tetap", "Kontrak"], len(employees), p=[0.6, 0.4])),
+    shift_utama=np.where(employees.peran == "Manajer", "pagi", rng2.choice(["pagi", "sore", "bergantian"], len(employees))),
+    no_hp=[f"0812-{x // 10**4:04d}-{x % 10**4:04d}" for x in rng2.integers(0, 10**8, len(employees))])
+
 # ---- cash closing per store / day / shift / cashier (cash sales vs counted)
 cash = ord_df[(ord_df.payment_method == "cash") & (ord_df.voided == 0)].copy()
 cash["date"] = cash.datetime.dt.date
-kas = cash.groupby(["date", "store_id", "shift", "cashier_id"]).total.sum().reset_index().rename(columns={"total": "expected_cash"})
+kas = cash.groupby(["date", "store_id", "shift", "cashier_id"]).total.agg(["sum", "size"]).reset_index().rename(columns={"sum": "expected_cash", "size": "jumlah_struk_tunai"})
 def counted(r):
     diff = int(rng.choice([0, 0, 0, -500, 500, -1000, 1000]))
     if r.cashier_id == "K08" and r["shift"] == "sore" and rng.random() < 0.7:
         diff = -int(rng.integers(40, 160)) * 1000
     return r.expected_cash + diff
 kas["actual_cash"] = kas.apply(counted, axis=1)
+kas["selisih"] = kas.actual_cash - kas.expected_cash
+kas = kas[["date", "store_id", "shift", "cashier_id", "jumlah_struk_tunai", "expected_cash", "actual_cash", "selisih"]]
 for r in kas.itertuples():
     if r.cashier_id == "K08" and r.actual_cash - r.expected_cash <= -40000:
         labels.append((f"KAS-{r.date}-{r.store_id}-{r.shift}", "kas", "K08", "selisih_kas"))
@@ -194,6 +275,9 @@ for _, st in stores.iterrows():
             loss = int(sys_q * rng.uniform(0.25, 0.40)); labels.append((f"OPN-{st.store_id}-{s.sku}", "opname", "", "susut_stok"))
         op.append((END.date(), st.store_id, s.sku, sys_q, sys_q - loss))
 opname = pd.DataFrame(op, columns=["date", "store_id", "sku", "system_qty", "counted_qty"])
+opname.insert(3, "produk", opname.sku.map(sku_x.name))
+opname["selisih"] = opname.counted_qty - opname.system_qty
+opname["petugas_hitung"] = opname.store_id.map(mgr)
 
 # ---- write
 def write(path, sheets, guide):
@@ -213,20 +297,33 @@ def write(path, sheets, guide):
                     for c in row:
                         c.alignment = Alignment(wrap_text=True, vertical="top")
 
+ORDER_COLS = ["order_id", "datetime", "store_id", "cashier_id", "customer_id", "channel", "shift", "payment_method", "payment_ref", "jumlah_item", "subtotal", "discount", "voucher_code",
+              "total", "ppn", "poin_didapat", "voided", "void_reason"]
+ord_out = ord_df[ORDER_COLS]
+item_out = item_df[["order_id", "sku", "nama_produk", "kategori", "brand", "qty", "unit_price", "line_total"]]
 G1 = [("Order", "order_id, datetime, store_id, cashier_id", "Satu baris per struk. datetime = tanggal dan jam transaksi"),
-      ("Order", "shift, payment_method", "pagi / sore; cash, debit, qris, kartu_kredit"),
-      ("Order", "subtotal, discount, total", "Total harus = subtotal - discount"),
-      ("Order", "voided, discount_approved_by", "voided 1 bila dibatalkan; ID atasan yang menyetujui diskon (kosong bila tidak ada)"),
-      ("Item", "order_id, sku, qty, unit_price", "Satu baris per produk dalam struk"),
-      ("Refund", "refund_id, order_id, datetime, store_id, cashier_id", "Refund dan order asalnya"),
-      ("Refund", "approved_by, sku, qty, amount, reason, resellable", "Penyetuju refund, produk, nilai, alasan, bisa dijual lagi (1/0)"),
-      ("Setoran_Kas", "date, store_id, shift, cashier_id, expected_cash, actual_cash", "Penjualan tunai menurut sistem dan uang yang disetor")]
+      ("Order", "customer_id", "ID pelanggan (merujuk sheet Pelanggan). GUEST = bukan member"),
+      ("Order", "channel, shift, payment_method, payment_ref", "Toko / Click & Collect / Pesan Antar; pagi / sore; cash, debit, qris, kartu_kredit; nomor referensi pembayaran non-tunai"),
+      ("Order", "jumlah_item, subtotal, discount, voucher_code", "Total qty barang, nilai sebelum diskon, nilai diskon, kode voucher (kosong = diskon manual)"),
+      ("Order", "total, ppn, poin_didapat", "Total = subtotal - discount. ppn = PPN 11% yang sudah termasuk dalam total. Poin member yang didapat"),
+      ("Order", "voided, void_reason", "voided 1 bila struk dibatalkan, disertai alasannya"),
+      ("Item", "order_id, sku, nama_produk, kategori, brand", "Satu baris per produk dalam struk, lengkap dengan nama, kategori, dan merek"),
+      ("Item", "qty, unit_price, line_total", "Jumlah, harga satuan saat transaksi, dan qty x harga"),
+      ("Refund", "refund_id, order_id, datetime, store_id, cashier_id, customer_id", "Refund, order asalnya, dan pelanggan yang meminta refund"),
+      ("Refund", "approved_by, sku, qty, amount, reason, resellable, refund_method", "Penyetuju, produk, nilai, alasan, bisa dijual lagi (1/0), cara uang dikembalikan"),
+      ("Setoran_Kas", "date, store_id, shift, cashier_id", "Satu baris per penutupan kas"),
+      ("Setoran_Kas", "jumlah_struk_tunai, expected_cash, actual_cash, selisih", "Jumlah struk tunai, penjualan tunai menurut sistem, uang yang disetor, selisihnya")]
 G2 = [("Karyawan", "employee_id, nama, store_id, peran", "Kasir atau Manajer"),
+      ("Karyawan", "tanggal_masuk, status_kerja, shift_utama, no_hp", "Data kepegawaian (contoh)"),
       ("Toko", "store_id, store_name, jam_buka, jam_tutup", "Jam operasional (jam, 24 jam)"),
-      ("SKU", "sku, name, category, price, unit_cost", "Master produk"),
-      ("Opname", "date, store_id, sku, system_qty, counted_qty", "Stok menurut sistem dan hasil hitung fisik")]
-write(OUT / "Data_Order_Lengkap.xlsx", {"Order": ord_df, "Item": item_df, "Refund": refund_df, "Setoran_Kas": kas}, G1)
-write(OUT / "Data_Master.xlsx", {"Karyawan": employees, "Toko": stores.drop(columns="scale"), "SKU": skus.drop(columns="popularity"), "Opname": opname}, G2)
+      ("Toko", "kota, alamat, telepon, manajer_id, tanggal_buka", "Detail toko"),
+      ("SKU", "sku, name, category, price, unit_cost", "Master produk: harga jual dan harga pokok"),
+      ("SKU", "brand, barcode, supplier, status", "Merek, barcode, pemasok, status produk"),
+      ("Opname", "date, store_id, sku, produk, system_qty, counted_qty, selisih, petugas_hitung", "Stok menurut sistem, hasil hitung fisik, selisih, dan siapa yang menghitung"),
+      ("Pelanggan", "customer_id, nama, member_tier", "Master pelanggan. Semua data pelanggan di sini adalah data rekaan"),
+      ("Pelanggan", "jenis_kelamin, tanggal_lahir, no_hp, email, kota, toko_langganan, tanggal_daftar", "Profil pelanggan (rekaan)")]
+write(OUT / "Data_Order_Lengkap.xlsx", {"Order": ord_out, "Item": item_out, "Refund": refund_df, "Setoran_Kas": kas}, G1)
+write(OUT / "Data_Master.xlsx", {"Karyawan": employees_x, "Toko": stores_x.drop(columns="scale"), "SKU": skus.drop(columns="popularity"), "Opname": opname, "Pelanggan": customers}, G2)
 pd.DataFrame(labels, columns=["ref", "tipe", "kasir", "skema"]).to_csv(OUT / "Label_Anomali.csv", index=False)
-print(f"orders={len(ord_df):,} items={len(item_df):,} refunds={len(refund_df):,} kas={len(kas):,} opname={len(opname)} labels={len(labels)}")
+print(f"orders={len(ord_df):,} items={len(item_df):,} refunds={len(refund_df):,} kas={len(kas):,} opname={len(opname)} pelanggan={len(customers):,} labels={len(labels)}")
 print({c: v["label"] for c, v in BAD.items()})

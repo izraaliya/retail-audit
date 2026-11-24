@@ -39,7 +39,7 @@ PLANTED = {"K02", "K05", "K08", "K11", "K14", "K17"}
 
 
 def test_all_kinds_detected(tables):
-    assert set(tables) == {"orders", "items", "refunds", "cash", "employees", "stores", "skus", "opname"}
+    assert set(tables) == {"orders", "items", "refunds", "cash", "employees", "stores", "skus", "opname", "customers"}
 
 
 def test_planted_cashiers_found_without_false_positives(res):
@@ -125,7 +125,7 @@ def test_health_index_schema():
     assert client.get("/health").json() == {"status": "ok"}
     assert "Retail Audit" in client.get("/").text
     sc = client.get("/api/schema").json()
-    assert len(sc["files"]) == 8 and sc["sample_files"] == ["Data_Order_Lengkap.xlsx", "Data_Master.xlsx"]
+    assert len(sc["files"]) == 9 and sc["sample_files"] == ["Data_Order_Lengkap.xlsx", "Data_Master.xlsx"]
 
 
 def test_sample_ask_and_report():
@@ -162,10 +162,10 @@ def test_bad_uploads(tables):
 def test_inspect_reports_tables_without_running_audit(tables):
     r = client.post("/api/inspect", files=[("files", ("Data_Master.xlsx", (S / "Data_Master.xlsx").read_bytes(), "application/octet-stream"))])
     d = r.json()
-    assert r.status_code == 200 and set(d["found"]) == {"employees", "stores", "skus", "opname"} and d["ready"] is False
+    assert r.status_code == 200 and set(d["found"]) == {"employees", "stores", "skus", "opname", "customers"} and d["ready"] is False
     both = client.post("/api/inspect", files=[("files", ("Data_Order_Lengkap.xlsx", (S / "Data_Order_Lengkap.xlsx").read_bytes(), "application/octet-stream")),
                                               ("files", ("Data_Master.xlsx", (S / "Data_Master.xlsx").read_bytes(), "application/octet-stream"))]).json()
-    assert both["ready"] is True and len(both["found"]) == 8 and both["duplicates"] == {}
+    assert both["ready"] is True and len(both["found"]) == 9 and both["duplicates"] == {}
     csv = tables["orders"].head(5).to_csv(index=False).encode()
     dup = client.post("/api/inspect", files=[("files", ("a.csv", csv, "text/csv")), ("files", ("b.csv", csv, "text/csv"))]).json()
     assert dup["ready"] is False and "orders" in dup["duplicates"]
@@ -345,3 +345,29 @@ def test_order_audit_api_and_report(monkeypatch):
     assert a["source"] == "aturan" and "F001" in a["answer"]
     bad = client.post("/api/analyze/sample", data={"mode": "xyz"})
     assert bad.status_code == 422 and "audit" in bad.json()["detail"].lower()
+
+
+def test_sample_data_is_complete(tables):
+    o, it, cu = tables["orders"], tables["items"], tables["customers"]
+    for c in ("customer_id", "channel", "payment_method", "voucher_code", "jumlah_item", "ppn", "poin_didapat", "void_reason"):
+        assert c in o.columns, c
+    for c in ("nama_produk", "kategori", "brand", "line_total"):
+        assert c in it.columns, c
+    assert (it.line_total == it.qty * it.unit_price).all()
+    assert set(it.nama_produk) == set(tables["skus"].name)
+    assert o.customer_id.nunique() > 1000 and (o.customer_id == "GUEST").mean() > 0.2
+    assert cu.customer_id.is_unique and {"no_hp", "email", "kota", "member_tier", "tanggal_daftar"} <= set(cu.columns)
+    assert "discount_approved_by" not in o.columns
+
+
+def test_customer_checks_find_the_planted_customers_only(res, tables):
+    truth = pd.read_csv(S / "Label_Anomali.csv")
+    planted = set(truth[truth.skema == "pelanggan_refund_sering"].ref)
+    flagged = {f["subject"].split(" ")[0] for f in res["findings"] if f["rule"] == "pelanggan_refund_sering"}
+    assert len(planted) == 3 and flagged == planted
+    unk = next(f for f in res["findings"] if f["rule"] == "pelanggan_tidak_dikenal")
+    assert unk["evidence_count"] == int((truth.skema == "pelanggan_tidak_dikenal").sum()) == 25
+    assert all(e["customer_id"].startswith("C9") for e in unk["evidence"])
+    assert all(f["audits"] == ["order"] for f in res["findings"] if f["rule"].startswith("pelanggan_"))
+    no_cust = run_audit({k: v for k, v in tables.items() if k != "customers"})
+    assert not {f["rule"] for f in no_cust["findings"]} & {"pelanggan_tidak_dikenal", "pelanggan_refund_sering"}

@@ -31,6 +31,8 @@ STEPS = {
     "nilai_tidak_wajar": ["Cocokkan dengan faktur atau bukti pembayaran pembelian besar (grosir, pesanan khusus).", "Periksa apakah angkanya salah ketik, misalnya kelebihan nol."],
     "harga_tidak_cocok": ["Periksa apakah ada promo resmi pada periode itu yang belum masuk data master.", "Cek siapa yang boleh mengubah harga di kasir.", "Perbarui harga master bila memang sudah usang."],
     "refund_melebihi_order": ["Buka order asal dan semua refund yang terkait, lalu cocokkan dengan barang yang dikembalikan.", "Periksa apakah refund yang sama diproses dua kali.", "Cek siapa yang menyetujui refund itu."],
+    "pelanggan_tidak_dikenal": ["Cari ID itu di sistem member: salah ketik, atau memang tidak pernah ada?", "Tanyakan ke kasir bagaimana ID itu dimasukkan dan apakah ada poin atau diskon member yang ikut diberikan.", "Periksa apakah ID yang sama dipakai berulang kali."],
+    "pelanggan_refund_sering": ["Hubungi pelanggan lewat nomor di master untuk memastikan refund memang diminta olehnya.", "Cocokkan barang retur secara fisik dengan catatan refund.", "Bandingkan dengan kasir yang memproses: apakah hampir selalu orang yang sama?"],
     "diskon_sering": ["Bandingkan dengan promo yang resmi berlaku pada periode itu.", "Tanyakan dasar pemberian diskon ke kasir."],
     "selisih_kas": ["Hitung kas bersama saksi pada penutupan berikutnya.", "Periksa kebiasaan membuka laci tanpa transaksi.", "Cek CCTV area kasir pada shift terkait."],
     "luar_jam_buka": ["Periksa log akses toko dan alarm pada jam itu.", "Cek apakah ada kegiatan resmi di luar jam (stok opname, event).", "Cek penggunaan akun kasir oleh orang lain."],

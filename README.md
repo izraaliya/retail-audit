@@ -11,7 +11,7 @@ The home page offers two audits over the same data. No rule needs to be configur
 | Audit | Question it answers | Checks |
 |-------|---------------------|--------|
 | **Audit Kasir** | Which cashier behaves differently from the others? | refund, discount, void, cash shortage, off-hours, repeated receipts, stock loss, anomaly model |
-| **Audit Data Order** | Is the order data itself wrong, odd or suspicious, whoever the cashier is? | totals that do not add up, impossible numbers, outlier receipt values, duplicate order ids, prices that differ from the SKU master, refunds without an order or larger than the purchase, repeated receipts |
+| **Audit Data Order** | Is the order data itself wrong, odd or suspicious, whoever the cashier is? | totals that do not add up, impossible numbers, outlier receipt values, duplicate order ids, prices that differ from the SKU master, refunds without an order or larger than the purchase, repeated receipts, unregistered customer ids, customers who refund unusually often |
 
 ![Screenshot](docs/screenshot.png)
 
@@ -21,7 +21,7 @@ Three layers, so each covers the others' blind spots:
 
 | Layer | What it does |
 |-------|--------------|
-| **Rules** | 18 deterministic checks, each with its evidence rows and the audit it belongs to (table below) |
+| **Rules** | 20 deterministic checks, each with its evidence rows and the audit it belongs to (table below) |
 | **Peer comparison** | Cashier rates (refund, discount, void) are compared to the median of all cashiers with a robust z-score (median and MAD), so a few outliers do not distort the baseline |
 | **Anomaly model** | An Isolation Forest over cashier-day behaviour (orders, basket value, refund rate, discount share, void share, off-hours share, cash variance, duplicates). It flags unusual *combinations* that no single rule catches and names the features that drive each flag |
 
@@ -47,6 +47,8 @@ Findings are ranked by score and rolled up into a risk score per cashier (the st
 | `nilai_tidak_wajar` | order | Receipt value far above the store's usual (5x the median and far outside the spread) |
 | `harga_tidak_cocok` | order | Item price differs from the SKU master price by more than 5% |
 | `refund_melebihi_order` | order | Refunds on an order add up to more than the purchase before discount |
+| `pelanggan_tidak_dikenal` | order | Orders carrying a customer id that is not in the customer master (needs the Pelanggan table) |
+| `pelanggan_refund_sering` | order | A customer whose refunds are a large share of their own orders, often through one cashier (needs the Pelanggan table) |
 
 ## Assistant
 
@@ -54,7 +56,7 @@ The assistant is an agent with five read-only tools (`summary`, `list_findings`,
 
 ## Data
 
-Real POS fraud data is confidential and no public dataset has cashier, discount, void, approval and cash-closing fields together, so the sample data is **synthetic**: 28k orders, 18 cashiers, 6 stores, 60 days. Six cashier schemes and one stock-loss hotspot are planted on purpose, and `sample_data/Label_Anomali.csv` records them so the detector can be measured:
+Real POS fraud data is confidential and no public dataset has cashier, discount, void, approval and cash-closing fields together, so the sample data is **synthetic**: 28k orders, 49k item lines, 1,600 customers, 18 cashiers, 6 stores, 60 days. Six cashier schemes, one stock-loss hotspot, three customers who collect a cashier's inflated refunds and 25 orders with unregistered customer ids are planted on purpose, and `sample_data/Label_Anomali.csv` records them so the detector can be measured:
 
 ```bash
 python scripts/generate_sample_data.py   # regenerate
@@ -67,14 +69,15 @@ Upload two Excel files (or CSV, one table each). Table types are detected from *
 
 | File | Sheet | Columns |
 |------|-------|---------|
-| `Data_Order_Lengkap.xlsx` | Order (required) | `order_id, datetime, store_id, cashier_id, subtotal, discount, total` (optional: `shift, payment_method, voided`) |
-| | Item | `order_id, sku, qty, unit_price` |
-| | Refund | `refund_id, order_id, datetime, store_id, cashier_id, amount` (optional: `approved_by, sku, qty, reason, resellable`) |
-| | Setoran_Kas | `date, store_id, cashier_id, expected_cash, actual_cash` (optional: `shift`) |
-| `Data_Master.xlsx` | Karyawan | `employee_id, nama, store_id, peran` |
-| | Toko | `store_id, store_name` (optional: `jam_buka, jam_tutup`) |
-| | SKU | `sku, name, price, unit_cost` |
-| | Opname | `store_id, sku, system_qty, counted_qty` |
+| `Data_Order_Lengkap.xlsx` | Order (required) | `order_id, datetime, store_id, cashier_id, subtotal, discount, total` (optional: `customer_id, channel, shift, payment_method, payment_ref, jumlah_item, voucher_code, ppn, poin_didapat, voided, void_reason`) |
+| | Item | `order_id, sku, qty, unit_price` (optional: `nama_produk, kategori, brand, line_total`) |
+| | Refund | `refund_id, order_id, datetime, store_id, cashier_id, amount` (optional: `customer_id, approved_by, sku, qty, reason, resellable, refund_method`) |
+| | Setoran_Kas | `date, store_id, cashier_id, expected_cash, actual_cash` (optional: `shift, jumlah_struk_tunai, selisih`) |
+| `Data_Master.xlsx` | Karyawan | `employee_id, nama, store_id, peran` (optional: `tanggal_masuk, status_kerja, shift_utama, no_hp`) |
+| | Toko | `store_id, store_name` (optional: `jam_buka, jam_tutup, kota, alamat, telepon, manajer_id, tanggal_buka`) |
+| | SKU | `sku, name, price, unit_cost` (optional: `category, brand, barcode, supplier, status`) |
+| | Opname | `store_id, sku, system_qty, counted_qty` (optional: `date, produk, selisih, petugas_hitung`) |
+| | Pelanggan | `customer_id, nama, member_tier` (optional: `jenis_kelamin, tanggal_lahir, no_hp, email, kota, toko_langganan, tanggal_daftar`) |
 
 ## Run
 

@@ -103,7 +103,7 @@ def health():
 def schema():
     where = {"orders": "Data_Order_Lengkap.xlsx › Order", "items": "Data_Order_Lengkap.xlsx › Item", "refunds": "Data_Order_Lengkap.xlsx › Refund",
              "cash": "Data_Order_Lengkap.xlsx › Setoran_Kas", "employees": "Data_Master.xlsx › Karyawan", "stores": "Data_Master.xlsx › Toko",
-             "skus": "Data_Master.xlsx › SKU", "opname": "Data_Master.xlsx › Opname"}
+             "skus": "Data_Master.xlsx › SKU", "opname": "Data_Master.xlsx › Opname", "customers": "Data_Master.xlsx › Pelanggan"}
     return {"files": [{"kind": k, "label": LABELS[k], "required": k in MANDATORY, "columns": REQUIRED[k], "sample": where[k]} for k in REQUIRED],
             "sample_files": SAMPLE_FILES}
 
