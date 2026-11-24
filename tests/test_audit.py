@@ -250,7 +250,7 @@ def test_gemini_request_shape_and_empty_parameters(res, monkeypatch):
     assert captured["url"].endswith("/models/gemini-x:generateContent") and "k-test" not in captured["url"]
     assert captured["headers"]["x-goog-api-key"] == "k-test"
     assert captured["body"]["toolConfig"]["functionCallingConfig"]["mode"] == "NONE"
-    assert len(captured["body"]["tools"][0]["functionDeclarations"]) == 5
+    assert len(captured["body"]["tools"][0]["functionDeclarations"]) == 6
 
 
 def test_gemini_enabled_depends_on_key(monkeypatch):
@@ -371,3 +371,20 @@ def test_customer_checks_find_the_planted_customers_only(res, tables):
     assert all(f["audits"] == ["order"] for f in res["findings"] if f["rule"].startswith("pelanggan_"))
     no_cust = run_audit({k: v for k, v in tables.items() if k != "customers"})
     assert not {f["rule"] for f in no_cust["findings"]} & {"pelanggan_tidak_dikenal", "pelanggan_refund_sering"}
+
+
+def test_assistant_answers_store_question(res, monkeypatch):
+    monkeypatch.setattr(agent, "enabled", lambda: False)
+    a = agent.ask(res, "store mana yg bermasalah")
+    assert a["answer"].startswith("Toko dengan temuan terbanyak") and a["steps"][0]["tool"] == "store_summary"
+    assert "Prioritas" not in a["answer"]
+
+
+def test_env_file_is_loaded(tmp_path, monkeypatch):
+    from app import main
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)
+    monkeypatch.setenv("GEMINI_MODEL", "keep-me")
+    (tmp_path / ".env").write_text('# komentar\nGEMINI_API_KEY="abc123"\nGEMINI_MODEL=other\n', encoding="utf-8")
+    main._load_env(tmp_path / ".env")
+    assert agent.enabled() and agent._api_key() == "abc123" and agent._model() == "keep-me"
+    monkeypatch.delenv("GEMINI_API_KEY", raising=False)

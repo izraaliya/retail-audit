@@ -116,6 +116,7 @@ TOOLS = [
     _schema("list_findings", "Daftar temuan, bisa disaring.", {"severity": {"type": "string", "description": "Tinggi, Sedang, atau Rendah"}, "cashier_id": {"type": "string"}, "rule": {"type": "string"}}),
     _schema("get_finding", "Detail satu temuan beserta baris bukti.", {"finding_id": {"type": "string", "description": "contoh F003"}}, ["finding_id"]),
     _schema("cashier_profile", "Profil risiko satu kasir.", {"cashier_id": {"type": "string", "description": "contoh K05"}}, ["cashier_id"]),
+    _schema("store_summary", "Jumlah temuan, tingkat, dan nilai berisiko per toko; urut dari yang paling bermasalah.", {}),
     _schema("cashier_breakdown", "SKU/produk yang paling besar nilai refund, diskon, atau void seorang kasir.", {"cashier_id": {"type": "string"}, "metric": {"type": "string", "description": "refund, discount, atau void"}}, ["cashier_id"]),
 ]
 
@@ -182,6 +183,21 @@ class Toolbox:
         self._note("cashier_breakdown", dict(cashier_id=cashier_id, metric=metric), out)
         return out
 
+    def store_summary(self) -> list:
+        """Findings per store: count, high-severity count, value at risk, and the cashiers involved. Worst store first."""
+        agg: dict = {}
+        for f in self.res["findings"]:
+            st = f.get("store") or "(tanpa toko)"
+            a = agg.setdefault(st, dict(toko=st, temuan=0, tinggi=0, nilai_rp=0, orang=set()))
+            a["temuan"] += 1
+            a["tinggi"] += f["severity"] == "Tinggi"
+            a["nilai_rp"] += round(f["amount"])
+            if f.get("subject_name"):
+                a["orang"].add(f["subject_name"])
+        out = sorted(({**a, "orang": sorted(a["orang"])[:5]} for a in agg.values()), key=lambda a: (-a["tinggi"], -a["nilai_rp"]))
+        self._note("store_summary", {}, out)
+        return out
+
     def summary(self) -> dict:
         """Overall audit summary: counts by severity, total value at risk, and the highest-risk cashiers."""
         fs = self.res["findings"]
@@ -212,6 +228,8 @@ def _facts(res: dict, q: str, tb: Toolbox) -> dict:
         facts["kasir_" + cid] = tb.cashier_profile(cid)
         if any(w in ql for w in ("sku", "produk", "barang", "item")):
             facts["produk_" + cid] = {m: tb.cashier_breakdown(cid, m) for m in ("refund", "discount", "void")}
+    if any(w in ql for w in ("toko", "store", "cabang", "outlet", "lokasi")):
+        facts["per_toko"] = tb.store_summary()[:10]
     if len(facts) == 1:
         facts["temuan_tinggi"] = tb.list_findings(severity="Tinggi")[:8]
     return facts
@@ -223,7 +241,7 @@ def _gen(res: dict, q: str, tb: Toolbox, facts: dict, use_tools: bool, timeout: 
     if use_tools:
         prompt += "\n\nPakai alat hanya bila data di atas belum cukup."
     contents: list = [{"role": "user", "parts": [{"text": prompt}]}]
-    allowed = {"summary", "list_findings", "get_finding", "cashier_profile", "cashier_breakdown"}
+    allowed = {"summary", "list_findings", "get_finding", "cashier_profile", "cashier_breakdown", "store_summary"}
     called = False
     for _ in range(3 if use_tools else 0):
         m = _chat(contents, TOOLS, timeout)
@@ -294,6 +312,13 @@ def _rule_answer(res: dict, q: str, tb: Toolbox) -> str:
         m, med = p["metrik"], p["median_semua_kasir"]
         lines.append(f"Dibanding median semua kasir: refund {m['refund_pct']}% (median {med['refund_pct']}%), diskon {m['diskon_pct']}% ({med['diskon_pct']}%), void {m['void_pct']}% ({med['void_pct']}%).")
         return "\n".join(lines)
+    if any(w in ql for w in ("toko", "store", "cabang", "outlet", "lokasi")):
+        rows = tb.store_summary()[:5]
+        if rows:
+            lines = ["Toko dengan temuan terbanyak (urut dari yang paling bermasalah):"]
+            lines += [f"- **{r['toko']}**: {r['temuan']} temuan ({r['tinggi']} tinggi), nilai sekitar {rp(r['nilai_rp'])}" + (f", terkait {', '.join(r['orang'])}" if r["orang"] else "") for r in rows]
+            lines.append("Tanyakan nama toko atau id temuan untuk detailnya.")
+            return "\n".join(lines)
     s = tb.summary()
     top = tb.list_findings(severity="Tinggi")[:5]
     lines = [f"Periode {s['periode']}, {s['jumlah_order']:,} order.".replace(",", "."),

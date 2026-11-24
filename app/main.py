@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import io
+import os
 import time
 import uuid
 from datetime import date
@@ -19,6 +20,25 @@ from .audit import DataError, LABELS, MANDATORY, REQUIRED, Params, detect_kind, 
 from .report import build_workbook
 
 ROOT = Path(__file__).resolve().parent.parent
+
+
+def _load_env(path: Path) -> None:
+    """Read KEY=VALUE lines from .env into the environment (existing variables win), so the key works without exporting it."""
+    try:
+        lines = path.read_text(encoding="utf-8-sig").splitlines()
+    except OSError:
+        return
+    for line in lines:
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        k, v = line.split("=", 1)
+        k, v = k.strip().removeprefix("export ").strip(), v.strip().strip('"').strip("'")
+        if k and v and not os.environ.get(k):
+            os.environ[k] = v
+
+
+_load_env(ROOT / ".env")
 STATIC, SAMPLES, REPORTS = Path(__file__).resolve().parent / "static", ROOT / "sample_data", ROOT / ".reports"
 SAMPLE_FILES = ["Data_Order_Lengkap.xlsx", "Data_Master.xlsx"]
 MAX_BYTES = 40 * 1024 * 1024
