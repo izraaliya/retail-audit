@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from . import agent
-from .audit import DataError, LABELS, MANDATORY, REQUIRED, Params, detect_kind, run_audit
+from .audit import DataError, LABELS, MANDATORY, REQUIRED, Params, detect_kind, run_audit, select
 from .report import build_workbook
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -74,7 +74,7 @@ def _payload(res: dict, job_id: str, detected: dict) -> dict:
     fs = res["findings"]
     slim = [{**{k: (v if k != "evidence" else v[:60]) for k, v in f.items()}, "steps": agent.STEPS.get(f["rule"], [])} for f in fs]
     return {
-        "job_id": job_id, "detected_files": detected, "meta": res["meta"],
+        "job_id": job_id, "mode": res["mode"], "detected_files": detected, "meta": res["meta"],
         "kpi": {"orders": res["meta"]["n_orders"], "findings": len(fs), "severity": {s: sum(1 for f in fs if f["severity"] == s) for s in ("Tinggi", "Sedang", "Rendah")},
                 "amount": round(sum(f["amount"] for f in fs)), "high_risk_cashiers": int((res["risk"].level == "Tinggi").sum())},
         "risk": _records(res["risk"]), "peers": _records(res["peers"]), "findings": slim,
@@ -82,9 +82,9 @@ def _payload(res: dict, job_id: str, detected: dict) -> dict:
     }
 
 
-def _run(tables: dict, detected: dict, discount_limit: float) -> dict:
+def _run(tables: dict, detected: dict, mode: str) -> dict:
     try:
-        res = run_audit(tables, Params(discount_limit=discount_limit))
+        res = select(run_audit(tables, Params()), mode)
     except DataError as e:
         raise HTTPException(422, str(e))
     job = uuid.uuid4().hex[:12]
@@ -108,31 +108,24 @@ def schema():
             "sample_files": SAMPLE_FILES}
 
 
-def _check(limit: float):
-    if not 5 <= limit <= 90:
-        raise HTTPException(422, "Batas diskon harus antara 5 dan 90 persen.")
-
-
 @app.post("/api/analyze")
-async def analyze(files: list[UploadFile] = File(...), discount_limit: float = Form(20.0)):
-    _check(discount_limit)
+async def analyze(files: list[UploadFile] = File(...), mode: str = Form("kasir")):
     tables, detected = {}, {}
     for f in files:
         for label, kind, df in _parse(f.filename or "file", await f.read()):
             if kind in tables:
                 raise HTTPException(422, f"Ada dua sumber untuk '{LABELS[kind]}' ({detected[kind]} dan {label}). Sisakan satu saja.")
             tables[kind], detected[kind] = df, label
-    return JSONResponse(_run(tables, detected, discount_limit))
+    return JSONResponse(_run(tables, detected, mode))
 
 
 @app.post("/api/analyze/sample")
-def analyze_sample(discount_limit: float = Form(20.0)):
-    _check(discount_limit)
+def analyze_sample(mode: str = Form("kasir")):
     tables, detected = {}, {}
     for name in SAMPLE_FILES:
         for label, kind, df in _parse(name, (SAMPLES / name).read_bytes()):
             tables[kind], detected[kind] = df, label
-    return JSONResponse(_run(tables, detected, discount_limit))
+    return JSONResponse(_run(tables, detected, mode))
 
 
 def _peek(filename: str, data: bytes) -> dict:
@@ -198,7 +191,7 @@ def report(job_id: str):
     path = REPORTS / f"{job_id}.xlsx"
     if not path.exists():
         build_workbook(job["res"], path)
-    return FileResponse(path, filename="Kertas_Kerja_Audit.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+    return FileResponse(path, filename="Kertas_Kerja_Audit_Data_Order.xlsx" if job["res"].get("mode") == "order" else "Kertas_Kerja_Audit_Kasir.xlsx", media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
 
 
 @app.get("/sample/{name}")

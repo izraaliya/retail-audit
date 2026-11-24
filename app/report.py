@@ -39,7 +39,8 @@ def build_workbook(res: dict, path):
     wb = Workbook()
     ws = wb.active
     ws.title = "Ringkasan"
-    ws["A1"], ws["A1"].font = "Kertas Kerja Audit Transaksi Toko", Font(name=F, size=14, bold=True)
+    title = "Kertas Kerja Audit Data Order" if res.get("mode") == "order" else "Kertas Kerja Audit Kasir"
+    ws["A1"], ws["A1"].font = title, Font(name=F, size=14, bold=True)
     ws["A2"], ws["A2"].font = f"Periode {meta['date_from']} sampai {meta['date_to']}  |  {meta['n_orders']:,} order  |  {meta['n_stores']} toko  |  {meta['n_cashiers']} kasir".replace(",", "."), Font(name=F, size=10, italic=True)
     cnt = {s: sum(1 for f in fs if f["severity"] == s) for s in ("Tinggi", "Sedang", "Rendah")}
     rows = [("Temuan tingkat Tinggi", cnt["Tinggi"]), ("Temuan tingkat Sedang", cnt["Sedang"]), ("Temuan tingkat Rendah", cnt["Rendah"]),

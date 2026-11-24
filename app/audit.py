@@ -23,6 +23,15 @@ REQUIRED = {
 LABELS = {"orders": "Order", "items": "Item order", "refunds": "Refund", "cash": "Setoran kas", "employees": "Karyawan",
           "stores": "Toko", "skus": "SKU", "opname": "Stok opname"}
 MANDATORY = ["orders"]
+AUDITS = ("kasir", "order")
+# which audit a rule belongs to: "kasir" = how each cashier behaves compared with peers, "order" = errors, oddities and fraud signs in the order data itself
+RULE_AUDITS = {
+    "refund_tinggi": ["kasir"], "refund_disetujui_sendiri": ["kasir"], "refund_tanpa_persetujuan": ["kasir"], "diskon_sering": ["kasir"],
+    "selisih_kas": ["kasir"], "luar_jam_buka": ["kasir"], "void_tinggi": ["kasir"], "pola_tidak_biasa": ["kasir"], "susut_stok": ["kasir"],
+    "refund_tanpa_order": ["kasir", "order"], "refund_sebelum_order": ["kasir", "order"], "refund_terlambat": ["kasir", "order"], "struk_ganda": ["kasir", "order"],
+    "integritas_data": ["order"], "id_ganda": ["order"], "angka_mustahil": ["order"], "nilai_tidak_wajar": ["order"], "harga_tidak_cocok": ["order"],
+    "refund_melebihi_order": ["order"],
+}
 DETECT_ORDER = ["orders", "refunds", "cash", "opname", "employees", "skus", "stores", "items"]
 
 
@@ -32,7 +41,6 @@ class DataError(ValueError):
 
 @dataclass
 class Params:
-    discount_limit: float = 20.0       # discount % above this needs manager approval
     refund_window_days: int = 30
     dup_minutes: int = 5
     cash_tolerance: float = 20000      # shortage per closing above this counts
@@ -89,11 +97,10 @@ def clean(t: dict[str, pd.DataFrame]) -> tuple[dict, list[str]]:
         o[c] = o[c].astype(str).str.strip()
     for c in ("subtotal", "discount", "total"):
         o[c] = pd.to_numeric(o[c], errors="coerce").fillna(0)
-    for c, d in (("voided", 0), ("discount_approved_by", "")):
+    for c, d in (("voided", 0),):
         if c not in o.columns:
             o[c] = d
     o["voided"] = pd.to_numeric(o.voided, errors="coerce").fillna(0).astype(int)
-    o["discount_approved_by"] = o.discount_approved_by.fillna("").astype(str).str.strip()
     if "shift" not in o.columns:
         o["shift"] = np.where(o.datetime.dt.hour < 16, "pagi", "sore")
     if o.order_id.duplicated().any():
@@ -130,7 +137,7 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
 
     def add(rule, subject, title, detail, score, evidence, cols, amount=0.0, metric=None, peer=None, kind="cashier"):
         findings.append(dict(
-            id=f"F{len(findings) + 1:03d}", rule=rule, subject=subject, subject_type=kind,
+            id=f"F{len(findings) + 1:03d}", rule=rule, audits=RULE_AUDITS[rule], subject=subject, subject_type=kind,
             subject_name=emp_name.get(subject, subject) if kind == "cashier" else subject,
             store=store_name.get(cashier_store.get(subject, ""), cashier_store.get(subject, "")) if kind == "cashier" else "",
             title=title, detail=detail, score=int(round(min(100, max(1, score)))), severity=sev(score),
@@ -184,22 +191,6 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
     d = o_ok[o_ok.subtotal > 0].copy()
     d["pct"] = d.discount / d.subtotal * 100
     dd = d[d.discount > 0]
-    unapproved = dd[(dd.pct > P.discount_limit + 0.5) & (dd.discount_approved_by == "")]
-    for c, g in unapproved.groupby("cashier_id"):
-        if len(g) >= 3:
-            add("diskon_tanpa_persetujuan", c, f"{len(g)} diskon di atas {P.discount_limit:.0f}% tanpa persetujuan atasan",
-                f"Diskon di atas batas wajib disetujui manajer. Nilai diskon {_rp(g.discount.sum())}.", 50 + min(45, 4 * len(g)), g,
-                ["order_id", "datetime", "subtotal", "discount", "pct", "discount_approved_by"], g.discount.sum(), len(g), 0)
-    near = dd[(dd.pct >= P.discount_limit - 2) & (dd.pct <= P.discount_limit + 0.5)]
-    share = (near.groupby("cashier_id").size().reindex(cashiers).fillna(0) / dd.groupby("cashier_id").size().reindex(cashiers).replace(0, np.nan)).fillna(0) * 100
-    z = robust_z(share)
-    for c in cashiers:
-        n_near = int((near.cashier_id == c).sum())
-        if z[c] >= P.min_z and n_near >= 8:
-            g = near[near.cashier_id == c]
-            add("diskon_di_batas", c, f"{_pct(share[c], 0)} diskon-nya tepat di bawah batas persetujuan",
-                f"{n_near} diskon berada di {P.discount_limit - 2:.0f}-{P.discount_limit:.0f}%, rekan kerja rata-rata {_pct(share.median(), 0)}. Pola ini khas untuk menghindari persetujuan atasan.",
-                50 + 6 * z[c], g, ["order_id", "datetime", "subtotal", "discount", "pct"], g.discount.sum(), round(share[c], 1), round(share.median(), 1))
     drate = (dd.groupby("cashier_id").size().reindex(cashiers).fillna(0) / n_orders.reindex(cashiers) * 100)
     z = robust_z(drate)
     for c in cashiers:
@@ -274,6 +265,59 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
             f"Total tidak sama dengan subtotal dikurangi diskon, atau subtotal tidak sama dengan jumlah item. Selisih total {_rp(mism.selisih.abs().sum())}. Terbanyak pada kasir {', '.join(f'{emp_name.get(k, k)} ({v})' for k, v in top.head(3).items())}.",
             40 + min(35, 3 * len(mism)), mism, ["order_id", "datetime", "cashier_id", "subtotal", "discount", "total", "selisih"], mism.selisih.abs().sum(), len(mism), 0, kind="data")
 
+    # ---------------------------------------------------------------- order-data checks (audit "order")
+    ro = raw["orders"]
+    ids = ro["order_id"].astype(str).str.strip()
+    dupm = ids.duplicated(keep=False)
+    if dupm.any():
+        g = ro[dupm].assign(order_id=ids[dupm]).sort_values("order_id").copy()
+        g["datetime"] = pd.to_datetime(g["datetime"], errors="coerce")
+        n_ids = int(g.order_id.nunique())
+        add("id_ganda", "Data order", f"{n_ids} order_id muncul lebih dari sekali",
+            f"{len(g)} baris memakai {n_ids} nomor order yang sama. Bisa input ganda atau struk yang disalin. Hanya baris pertama tiap nomor yang dipakai dalam pemeriksaan.",
+            50 + min(40, 3 * n_ids), g, ["order_id", "datetime", "cashier_id", "subtotal", "discount", "total"], pd.to_numeric(g.total, errors="coerce").fillna(0).sum(), n_ids, 0, kind="data")
+
+    reason = np.select([(o.subtotal < 0) | (o.total < 0) | (o.discount < 0), o.discount > o.subtotal + 1], ["ada nilai negatif", "diskon lebih besar dari subtotal"], "")
+    imp = o.assign(alasan=reason)
+    imp = imp[imp.alasan != ""]
+    if len(imp):
+        add("angka_mustahil", "Data order", f"{len(imp)} struk dengan angka yang tidak masuk akal",
+            f"Nilai negatif atau diskon melebihi subtotal. Bisa salah input, retur yang dicatat sebagai penjualan, atau manipulasi angka. Terbanyak pada kasir "
+            + ", ".join(f"{emp_name.get(k, k)} ({v})" for k, v in imp.cashier_id.value_counts().head(3).items()) + ".",
+            55 + min(40, 5 * len(imp)), imp, ["order_id", "datetime", "cashier_id", "subtotal", "discount", "total", "alasan"], imp.total.abs().sum(), len(imp), 0, kind="data")
+
+    pos = o_ok[o_ok.total > 0].copy()
+    if len(pos):
+        pos["median_toko"] = pos.groupby("store_id").total.transform("median")
+        pos["z"] = np.log(pos.total).groupby(pos.store_id).transform(robust_z)
+        big = pos[(pos.z >= 5) & (pos.total >= 5 * pos.median_toko)].sort_values("total", ascending=False)
+        if len(big):
+            add("nilai_tidak_wajar", "Data order", f"{len(big)} struk bernilai jauh di atas kebiasaan tokonya",
+                f"Nilai struk setidaknya 5 kali median tokonya dan sangat jauh dari sebaran normal. Bisa pembelian besar yang sah atau salah ketik angka. Total {_rp(big.total.sum())}.",
+                30 + min(45, 6 * len(big)), big, ["order_id", "datetime", "store_id", "cashier_id", "total", "median_toko"], big.total.sum(), len(big), 0, kind="data")
+
+    if "items" in t and "skus" in t:
+        it = t["items"].merge(t["skus"][["sku", "name", "price"]].rename(columns={"name": "produk", "price": "harga_master"}), on="sku", how="inner")
+        for c in ("unit_price", "harga_master", "qty"):
+            it[c] = pd.to_numeric(it[c], errors="coerce")
+        it = it.dropna(subset=["unit_price", "harga_master"])
+        pb = it[(it.unit_price - it.harga_master).abs() > np.maximum(1, 0.05 * it.harga_master)].assign(selisih=lambda d: d.unit_price - d.harga_master)
+        if len(pb):
+            top = pb.produk.value_counts().head(3)
+            add("harga_tidak_cocok", "Data order", f"{len(pb)} baris item dengan harga berbeda dari harga master",
+                f"Harga di struk menyimpang lebih dari 5% dari harga master SKU. Bisa promo yang tidak tercatat, harga diubah manual, atau data master usang. Terbanyak: "
+                + ", ".join(f"{k} ({v})" for k, v in top.items()) + ".",
+                35 + min(45, 3 * len(pb)), pb, ["order_id", "sku", "produk", "qty", "unit_price", "harga_master", "selisih"], (pb.selisih.abs() * pb.qty.fillna(1)).sum(), len(pb), 0, kind="data")
+
+    if rf is not None and len(rf):
+        rs = rf.groupby("order_id").amount.sum().rename("total_refund")
+        xo = o.join(rs, on="order_id", how="inner")
+        over = xo[xo.total_refund > xo.subtotal + 1].assign(kelebihan=lambda d: d.total_refund - d.subtotal)
+        if len(over):
+            add("refund_melebihi_order", "Data order", f"{len(over)} order di-refund lebih besar dari nilainya",
+                f"Total refund lebih besar dari nilai belanja order asalnya (sebelum diskon), selisih {_rp(over.kelebihan.sum())}. Mustahil terjadi pada refund yang wajar: bisa refund ganda, salah input, atau refund fiktif.",
+                55 + min(40, 6 * len(over)), over, ["order_id", "datetime", "cashier_id", "subtotal", "total_refund", "kelebihan"], over.kelebihan.sum(), len(over), 0, kind="data")
+
     # ---------------------------------------------------------------- R10 stock shrinkage
     op = t.get("opname")
     if op is not None and len(op):
@@ -299,20 +343,24 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
                 "Model mendeteksi kombinasi angka yang tidak biasa. Ciri yang paling menonjol: " + ", ".join(info["drivers"]) + ".",
                 35 + 60 * info["flag_share"], ev, ["tanggal", "skor", "penyebab"], 0, round(info["flag_share"] * 100, 1), None)
 
-    # ---------------------------------------------------------------- risk per cashier
-    fdf = pd.DataFrame(findings) if findings else pd.DataFrame(columns=["subject", "score", "subject_type", "rule", "amount"])
-    rows = []
-    for c in cashiers:
-        fs = fdf[(fdf.subject == c) & (fdf.subject_type == "cashier")] if len(fdf) else fdf
-        scores = sorted(fs.score.tolist(), reverse=True)
-        risk = 0.0
-        for i, s_ in enumerate(scores):
-            risk += s_ * (0.6 ** i)
-        risk = min(100.0, risk)
-        rows.append(dict(cashier_id=c, nama=emp_name.get(c, c), store=store_name.get(cashier_store[c], cashier_store[c]), orders=int(n_orders[c]),
-                         findings=len(fs), risk=round(risk), level=sev(risk) if risk >= 40 else "Normal",
-                         amount=float(fs.amount.sum()) if len(fs) else 0.0, rules=", ".join(sorted(set(fs.rule))) if len(fs) else ""))
-    risk_df = pd.DataFrame(rows).sort_values(["risk", "amount"], ascending=False).reset_index(drop=True)
+    # ---------------------------------------------------------------- risk per cashier (one table per audit)
+    def make_risk(fl: list[dict]) -> pd.DataFrame:
+        fdf = pd.DataFrame(fl) if fl else pd.DataFrame(columns=["subject", "score", "subject_type", "rule", "amount"])
+        rows = []
+        for c in cashiers:
+            fs = fdf[(fdf.subject == c) & (fdf.subject_type == "cashier")] if len(fdf) else fdf
+            scores = sorted(fs.score.tolist(), reverse=True)
+            risk = 0.0
+            for i, s_ in enumerate(scores):
+                risk += s_ * (0.6 ** i)
+            risk = min(100.0, risk)
+            rows.append(dict(cashier_id=c, nama=emp_name.get(c, c), store=store_name.get(cashier_store[c], cashier_store[c]), orders=int(n_orders[c]),
+                             findings=len(fs), risk=round(risk), level=sev(risk) if risk >= 40 else "Normal",
+                             amount=float(fs.amount.sum()) if len(fs) else 0.0, rules=", ".join(sorted(set(fs.rule))) if len(fs) else ""))
+        return pd.DataFrame(rows).sort_values(["risk", "amount"], ascending=False).reset_index(drop=True)
+
+    risk_df = make_risk(findings)
+    risk_by = {m: make_risk([f for f in findings if m in f["audits"]]) for m in AUDITS}
     findings.sort(key=lambda f: (-f["score"], -f["amount"]))
     for i, f in enumerate(findings, 1):
         f["id"] = f"F{i:03d}"
@@ -326,9 +374,19 @@ def run_audit(raw: dict[str, pd.DataFrame], P: Params | None = None) -> dict:
     })
     meta = dict(n_orders=int(len(o)), n_cashiers=len(cashiers), n_stores=int(o.store_id.nunique()), date_from=str(o.datetime.min().date()),
                 date_to=str(o.datetime.max().date()), revenue=float(o_ok.total.sum()), warnings=warnings,
-                params=dict(discount_limit=P.discount_limit, refund_window_days=P.refund_window_days),
+                params=dict(refund_window_days=P.refund_window_days),
                 checks=[k for k, v in (("refunds", rf), ("cash", kas), ("stores", t.get("stores")), ("items", t.get("items")), ("opname", op)) if v is not None])
-    return dict(findings=findings, risk=risk_df, peers=peers, meta=meta, ml=ml, tables=t, feats=feats)
+    return dict(findings=findings, risk=risk_df, risk_by=risk_by, peers=peers, meta=meta, ml=ml, tables=t, feats=feats)
+
+
+def select(res: dict, mode: str) -> dict:
+    """The view of one audit: only its findings (renumbered F001...) and the cashier risk table computed from them."""
+    if mode not in AUDITS:
+        raise DataError("Jenis audit tidak dikenal. Pilih audit kasir atau audit data order.")
+    fs = [dict(f) for f in res["findings"] if mode in f["audits"]]
+    for i, f in enumerate(fs, 1):
+        f["id"] = f"F{i:03d}"
+    return {**res, "findings": fs, "risk": res["risk_by"][mode], "mode": mode}
 
 
 # ---------------------------------------------------------------- features + model
@@ -343,7 +401,7 @@ def _features(o, rf, kas, t, P) -> pd.DataFrame:
     f = pd.DataFrame({
         "orders": g.size(),
         "avg_total": g.total.mean(),
-        "discount_share": g.apply(lambda d: ((d.discount > 0) & (d.discount / d.subtotal.replace(0, np.nan) * 100 > P.discount_limit - 2)).mean(), include_groups=False),
+        "discount_share": g.apply(lambda d: (d.discount > 0).mean(), include_groups=False),
         "void_share": g.voided.mean(),
     })
     if "stores" in t and {"jam_buka", "jam_tutup"} <= set(t["stores"].columns):

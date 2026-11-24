@@ -52,6 +52,21 @@
   .hero svg { width:100%; height:auto; filter:drop-shadow(0 18px 24px rgba(34,48,74,.14)); animation:float 5s ease-in-out infinite; }
   @keyframes float { 0%,100% { transform:translateY(0); } 50% { transform:translateY(-7px); } }
 
+  /* home: two choices */
+  .choices { display:grid; grid-template-columns:1fr 1fr; gap:22px; margin-top:6px; }
+  .choice { all:unset; box-sizing:border-box; cursor:pointer; display:flex; flex-direction:column; gap:12px; background:var(--card); border:1px solid var(--line); border-radius:24px; padding:28px; box-shadow:var(--shadow); position:relative; overflow:hidden; transition:transform .2s,box-shadow .2s; }
+  .choice::before { content:""; position:absolute; inset:0 0 auto 0; height:6px; background:var(--brand); }
+  .choice.o::before { background:var(--coral); }
+  .choice:hover { transform:translateY(-5px); box-shadow:0 26px 44px -22px rgba(34,48,74,.45); } .choice:focus-visible { outline:3px solid var(--sky); outline-offset:3px; }
+  .choice .ic { width:62px; height:62px; border-radius:20px; display:grid; place-items:center; background:var(--brand-soft); } .choice.o .ic { background:var(--coral-soft); }
+  .choice h2 { margin:6px 0 0; font-size:24px; } .choice p { margin:0; color:var(--muted); font-size:15.5px; }
+  .choice .tg { display:flex; flex-wrap:wrap; gap:7px; margin-top:2px; } .choice .tg span { font:600 12.5px var(--font); background:var(--soft); color:#47526A; padding:4px 12px; border-radius:99px; }
+  .choice .go2 { margin-top:auto; padding-top:10px; font:700 15px var(--font); color:var(--brand-d); display:flex; align-items:center; gap:8px; } .choice.o .go2 { color:#C2411F; }
+  .choice .go2::after { content:"\2192"; transition:transform .2s; } .choice:hover .go2::after { transform:translateX(5px); }
+  .modebar { display:flex; align-items:center; gap:14px; flex-wrap:wrap; margin-bottom:6px; } .modebar .pill { margin-bottom:0; } .modebar.o .pill { color:#B03A1B; background:var(--coral-soft); } .modebar.o .pill::before { background:var(--coral); }
+  .linkbtn { all:unset; cursor:pointer; font:600 14px var(--font); color:var(--muted); border-bottom:1.5px dotted var(--muted); } .linkbtn:hover { color:var(--ink); } .linkbtn:focus-visible { outline:3px solid var(--sky); outline-offset:3px; }
+  .hero.one { grid-template-columns:1fr; }
+
   /* intake */
   .intake { display:grid; grid-template-columns:1.1fr 1fr; gap:20px; align-items:start; } .intake > div { background:var(--card); border-radius:var(--r); padding:24px; box-shadow:var(--shadow); border:1px solid var(--line); }
   .step { font:700 15px var(--font); margin:0 0 14px; display:flex; gap:10px; align-items:center; } .step i { font-style:normal; background:var(--brand); color:#fff; width:26px; height:26px; border-radius:50%; display:grid; place-items:center; font-size:13px; flex:none; }
@@ -153,7 +168,7 @@
   .cmdbar input { flex:1; background:#fff; border:1.5px solid var(--line); color:var(--ink); padding:11px 15px; font:500 15px var(--font); border-radius:999px; min-width:0; } .cmdbar input:focus { outline:none; border-color:var(--brand); box-shadow:0 0 0 4px var(--brand-soft); }
   .cmdbar button.go { background:var(--brand); color:#fff; border:0; padding:11px 18px; font:700 14.5px var(--font); border-radius:999px; cursor:pointer; } .cmdbar button.go:hover { background:var(--brand-d); } .cmdbar button.go:disabled { opacity:.5; }
 
-  @media (max-width:900px) { .hero { grid-template-columns:1fr; } .hero svg { display:none; } .intake,.memo,.rank { grid-template-columns:1fr; } .topbar .wrap { gap:10px; } .word span { display:none; } }
+  @media (max-width:900px) { .choices { grid-template-columns:1fr; } .hero { grid-template-columns:1fr; } .hero svg { display:none; } .intake,.memo,.rank { grid-template-columns:1fr; } .topbar .wrap { gap:10px; } .word span { display:none; } }
   @media (max-width:640px) { .wrap { padding:0 14px; } .topbar .wrap { height:auto; padding:10px 14px; flex-wrap:wrap; } .tabs { order:3; width:100%; margin:0; overflow-x:auto; } .tabs button { padding:8px 13px; } .memo article { padding:22px 18px; } .cmdbar { right:12px; bottom:12px; } .rank .row { grid-template-columns:90px 1fr 48px; } }
   @media (prefers-reduced-motion:reduce) { * { animation:none !important; transition:none !important; } }
 </style>
@@ -162,7 +177,8 @@
 <header class="topbar"><div class="wrap">
   <div class="brand"><span class="logo" aria-hidden="true"><svg width="22" height="22" viewBox="0 0 22 22" fill="none"><circle cx="10" cy="10" r="6" stroke="#fff" stroke-width="2.6"/><path d="M14.5 14.5L19 19" stroke="#fff" stroke-width="2.6" stroke-linecap="round"/></svg></span><div class="word">Retail Audit<span>cek transaksi toko dengan tenang</span></div></div>
   <nav class="tabs" id="tabs" role="tablist" aria-label="Bagian">
-    <button data-v="data" class="on" role="tab">Unggah</button>
+    <button data-v="home" class="on" role="tab">Beranda</button>
+    <button data-v="data" role="tab" disabled>Unggah data</button>
     <button data-v="memo" role="tab" disabled>Ringkasan</button>
     <button data-v="cmp" role="tab" disabled>Perbandingan</button>
     <button data-v="cases" role="tab" disabled>Kasus<sup id="nCases"></sup></button>
@@ -171,13 +187,39 @@
 </div></header>
 
 <main class="wrap">
-  <section class="view" id="v-data">
+  <section class="view" id="v-home">
     <div class="hero">
       <div>
-        <h1>Cari transaksi yang <em>janggal</em>, tanpa pusing.</h1>
-        <p class="lede">Unggah data penjualan, refund, dan kas. Tiap kasir dibandingkan dengan rekan-rekannya, lalu kita tunjukkan mana yang perlu dilihat lagi, lengkap dengan baris data sebagai buktinya.</p>
+        <h1>Mau periksa <em>apa</em> hari ini?</h1>
+        <p class="lede">Pilih jenis audit. Keduanya memakai data penjualan yang sama, hanya beda sudut pandangnya. Tidak ada aturan yang perlu diatur dulu.</p>
       </div>
       <svg viewBox="0 0 250 220" fill="none" aria-hidden="true"><rect x="38" y="14" width="140" height="176" rx="16" fill="#fff" stroke="#EDE5DA" stroke-width="2"/><rect x="58" y="40" width="70" height="9" rx="4.5" fill="#DDF3EE"/><rect x="58" y="64" width="100" height="7" rx="3.5" fill="#EDE5DA"/><rect x="58" y="82" width="86" height="7" rx="3.5" fill="#EDE5DA"/><rect x="58" y="100" width="100" height="7" rx="3.5" fill="#FFE7E0"/><rect x="58" y="118" width="64" height="7" rx="3.5" fill="#EDE5DA"/><rect x="58" y="146" width="40" height="9" rx="4.5" fill="#14967F"/><circle cx="168" cy="136" r="38" fill="#fff" fill-opacity=".8" stroke="#22304A" stroke-width="7"/><path d="M196 164l32 32" stroke="#22304A" stroke-width="9" stroke-linecap="round"/><path d="M152 138l11 11 20-24" stroke="#14967F" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"/><circle cx="214" cy="38" r="9" fill="#FFB020"/><circle cx="20" cy="150" r="6" fill="#F2603F" fill-opacity=".7"/></svg>
+    </div>
+    <div class="choices">
+      <button class="choice" id="pickKasir" type="button">
+        <span class="ic" aria-hidden="true"><svg width="34" height="34" viewBox="0 0 34 34" fill="none"><circle cx="17" cy="11" r="6" stroke="#14967F" stroke-width="2.8"/><path d="M5 29c1.4-6 6.2-9 12-9s10.6 3 12 9" stroke="#14967F" stroke-width="2.8" stroke-linecap="round"/></svg></span>
+        <h2>Audit Kasir</h2>
+        <p>Bandingkan perilaku tiap kasir dengan rekan-rekannya. Siapa yang refund, diskon, atau void-nya jauh di atas biasanya, atau kasnya sering kurang?</p>
+        <span class="tg"><span>Refund</span><span>Diskon</span><span>Void</span><span>Selisih kas</span><span>Jam transaksi</span></span>
+        <span class="go2">Mulai audit kasir</span>
+      </button>
+      <button class="choice o" id="pickOrder" type="button">
+        <span class="ic" aria-hidden="true"><svg width="34" height="34" viewBox="0 0 34 34" fill="none"><path d="M8 4h18v26l-3.4-2.4L19.2 30 17 28l-2.2 2-3.4-2.4L8 30z" stroke="#F2603F" stroke-width="2.8" stroke-linejoin="round"/><path d="M13 12h8M13 18h8" stroke="#F2603F" stroke-width="2.8" stroke-linecap="round"/></svg></span>
+        <h2>Audit Data Order</h2>
+        <p>Cari data yang salah, aneh, atau mencurigakan di transaksinya sendiri, terlepas dari siapa kasirnya. Apakah ada angka yang tidak cocok atau struk yang janggal?</p>
+        <span class="tg"><span>Total tidak cocok</span><span>Struk kembar</span><span>Refund tanpa order</span><span>Harga janggal</span><span>Nomor order ganda</span></span>
+        <span class="go2">Mulai audit data order</span>
+      </button>
+    </div>
+  </section>
+
+  <section class="view hidden" id="v-data">
+    <div class="modebar" id="modebar"><span class="pill" id="modePill"></span><button class="linkbtn" id="changeMode" type="button">&larr; Ganti jenis audit</button></div>
+    <div class="hero one">
+      <div>
+        <h1 id="dTitle"></h1>
+        <p class="lede" id="dLede"></p>
+      </div>
     </div>
     <div class="sheet intake">
       <div>
@@ -193,8 +235,8 @@
         <p class="step"><i>2</i>Cek kelengkapan data</p>
         <ul class="check" id="check" aria-live="polite"></ul>
         <div class="ready no" id="ready">Belum ada berkas. Data Order wajib ada.</div>
-        <p class="step" style="margin-top:26px"><i>3</i>Atur dan mulai</p>
-        <label>Diskon di atas berapa persen yang wajib disetujui atasan?<input id="limit" type="number" value="20" min="5" max="90"></label>
+        <p class="step" style="margin-top:26px"><i>3</i>Mulai periksa</p>
+        <p class="small" id="goHint" style="margin:0 0 16px"></p>
         <div class="btns"><button id="go" class="btn">Mulai periksa</button><button id="sample" class="btn alt" type="button">Coba data contoh</button></div>
         <div id="loading" class="loading hidden" aria-live="polite"><i></i><i></i><i></i>Sebentar ya, transaksinya lagi dicek…</div>
       </div>
@@ -209,7 +251,7 @@
   <section class="view hidden" id="v-memo">
     <div class="memo">
       <article>
-        <span class="pill">Hasil pemeriksaan</span>
+        <span class="pill" id="mPill">Hasil pemeriksaan</span>
         <h2 id="mTitle"></h2>
         <dl class="head" id="mHead"></dl>
         <div id="mBody"></div>
@@ -225,8 +267,8 @@
   </section>
 
   <section class="view hidden" id="v-cases">
-    <h2>Kasus yang perlu dilihat</h2>
-    <p class="lede">Satu kartu untuk tiap orang atau toko, diurutkan dari skor risiko tertinggi. Buka kartunya untuk membaca temuan, cara memverifikasi, dan buktinya.</p>
+    <h2 id="cTitle">Kasus yang perlu dilihat</h2>
+    <p class="lede" id="cLede">Satu kartu untuk tiap orang atau toko, diurutkan dari skor risiko tertinggi. Buka kartunya untuk membaca temuan, cara memverifikasi, dan buktinya.</p>
     <div class="filters"><label><input type="checkbox" id="onlyHits" checked> Tampilkan yang punya temuan saja</label></div>
     <div class="cases" id="cases"></div>
   </section>
@@ -248,7 +290,18 @@ const $ = id => document.getElementById(id);
 const fmt = n => (n === null || n === undefined || n === "") ? "" : Number(n).toLocaleString("id-ID", {maximumFractionDigits: 2});
 const rp = n => "Rp " + Math.round(n).toLocaleString("id-ID");
 const rpShort = n => n >= 1e9 ? "Rp " + (n / 1e9).toLocaleString("id-ID", {maximumFractionDigits: 2}) + " M" : n >= 1e6 ? "Rp " + (n / 1e6).toLocaleString("id-ID", {maximumFractionDigits: 1}) + " jt" : rp(n);
-let files = [], D = null;
+let files = [], D = null, MODE = null;
+const RL = {refund_tanpa_order: "Refund tanpa order asal", refund_sebelum_order: "Refund sebelum order dibuat", refund_terlambat: "Refund terlalu lama setelah order", refund_melebihi_order: "Refund lebih besar dari belanjanya",
+  struk_ganda: "Struk kembar", integritas_data: "Angka struk tidak cocok", angka_mustahil: "Angka tidak masuk akal", nilai_tidak_wajar: "Nilai struk janggal", harga_tidak_cocok: "Harga beda dari master", id_ganda: "Nomor order ganda"};
+const MODES = {
+  kasir: {pill: "Audit Kasir", cls: "", title: "Siapa kasir yang beda dari rekan-rekannya?", lede: "Unggah data penjualan, refund, dan kas. Tiap kasir dibandingkan dengan rekan-rekannya, lalu kita tunjukkan siapa yang perlu dilihat lagi, lengkap dengan baris data sebagai buktinya.",
+    hint: "Tidak ada aturan yang perlu diatur. Setiap kasir dan toko dibandingkan dengan rekan-rekannya, lalu yang polanya paling beda ditandai.", tables: ["orders", "items", "refunds", "cash", "employees", "stores", "skus", "opname"],
+    unlock: {orders: "Dasar semua pemeriksaan: diskon, void, jam transaksi, kasir vs rekan", items: "Struk kembar berturutan", refunds: "Refund berlebihan, tanpa order, disetujui sendiri, terlambat", cash: "Selisih kas pada penutupan",
+      employees: "Nama kasir di laporan (bukan sekadar kode)", stores: "Transaksi di luar jam buka dan nama toko", skus: "Harga pokok untuk nilai susut stok", opname: "Susut stok per toko dan produk"}},
+  order: {pill: "Audit Data Order", cls: "o", title: "Adakah data order yang salah atau mencurigakan?", lede: "Unggah data order. Kita periksa transaksinya sendiri: angka yang tidak cocok, struk kembar, refund yang janggal, dan harga yang menyimpang, tanpa melihat siapa kasirnya.",
+    hint: "Tidak ada aturan yang perlu diatur. Setiap transaksi diperiksa konsistensinya dan dicari yang menyimpang dari kebiasaan.", tables: ["orders", "items", "refunds", "skus"],
+    unlock: {orders: "Dasar audit: total tidak cocok, angka tidak masuk akal, nilai struk janggal, nomor order ganda", items: "Subtotal tidak cocok dengan isi struk, struk kembar", refunds: "Refund tanpa order, sebelum order, atau lebih besar dari belanjanya", skus: "Harga di struk berbeda dari harga master"}}
+};
 
 function el(tag, props = {}, ...kids) {
   const e = document.createElement(tag);
@@ -261,10 +314,21 @@ const N = t => el("b", {class: "n", text: t});
 // ---- tabs
 function show(v) {
   document.querySelectorAll("#tabs button").forEach(b => { const on = b.dataset.v === v; b.classList.toggle("on", on); b.setAttribute("aria-selected", on); });
-  ["data", "memo", "cmp", "cases"].forEach(k => $("v-" + k).classList.toggle("hidden", k !== v));
+  ["home", "data", "memo", "cmp", "cases"].forEach(k => $("v-" + k).classList.toggle("hidden", k !== v));
   scrollTo({top: 0});
 }
 $("tabs").onclick = e => { const b = e.target.closest("button"); if (b && !b.disabled) show(b.dataset.v); };
+
+// ---- choose the audit
+function pick(m) {
+  MODE = m; const c = MODES[m];
+  $("modePill").textContent = c.pill; $("modebar").className = "modebar " + c.cls;
+  $("dTitle").textContent = c.title; $("dLede").textContent = c.lede; $("goHint").textContent = c.hint;
+  document.querySelector('#tabs [data-v="data"]').disabled = false;
+  paint(); show("data");
+}
+$("pickKasir").onclick = () => pick("kasir"); $("pickOrder").onclick = () => pick("order");
+$("changeMode").onclick = () => show("home");
 
 // ---- upload
 const drop = $("drop"), input = $("file");
@@ -274,10 +338,8 @@ drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefau
 ["dragleave", "drop"].forEach(ev => drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.remove("over"); }));
 drop.addEventListener("drop", e => addFiles(e.dataTransfer.files));
 input.onchange = () => { addFiles(input.files); input.value = ""; };
-const UNLOCK = {orders: "Dasar semua pemeriksaan: diskon, void, jam transaksi, kasir vs rekan, total tidak cocok", items: "Struk kembar dan subtotal tidak cocok dengan isi struk",
-  refunds: "Refund berlebihan, tanpa order, disetujui sendiri, terlambat", cash: "Selisih kas pada penutupan", employees: "Nama kasir di laporan (bukan sekadar kode)",
-  stores: "Transaksi di luar jam buka dan nama toko", skus: "Harga pokok untuk nilai susut stok", opname: "Susut stok per toko dan produk"};
 const KORDER = ["orders", "items", "refunds", "cash", "employees", "stores", "skus", "opname"];
+const ko = () => MODES[MODE || "kasir"].tables;
 let SCHEMA = null, INSP = null, seq = 0;
 function addFiles(l) { for (const f of l) if (!files.some(x => x.name === f.name && x.size === f.size)) files.push(f); chips(); }
 async function inspectFiles() {
@@ -302,21 +364,20 @@ function paint() {
     return el("div", {class: "slip " + (info ? (ok ? "good" : "bad") : "")}, el("div", {class: "fn", text: f.name}), rm, bx);
   }));
   const ul = $("check"); if (!SCHEMA) return;
-  ul.replaceChildren(...KORDER.map(k => { const got = !!found[k], isd = !!dup[k], req = k === "orders";
-    const li = el("li", {class: (got ? "got " : "") + (isd ? "dup" : "")}, el("span", {class: "bx", "aria-hidden": "true"}), el("div", {}, el("b", {text: KL[k]}), req ? el("span", {class: "req", text: "WAJIB"}) : null, el("span", {class: "unl", text: isd ? "Ada dua sumber, sisakan satu: " + dup[k].join(" dan ") : (got ? found[k] + ". " : "") + UNLOCK[k]})));
+  ul.replaceChildren(...ko().map(k => { const got = !!found[k], isd = !!dup[k], req = k === "orders";
+    const li = el("li", {class: (got ? "got " : "") + (isd ? "dup" : "")}, el("span", {class: "bx", "aria-hidden": "true"}), el("div", {}, el("b", {text: KL[k]}), req ? el("span", {class: "req", text: "WAJIB"}) : null, el("span", {class: "unl", text: isd ? "Ada dua sumber, sisakan satu: " + dup[k].join(" dan ") : (got ? found[k] + ". " : "") + MODES[MODE || "kasir"].unlock[k]})));
     li.querySelector(".bx").innerHTML = TICK; return li; }));
-  const r = $("ready"), n = Object.keys(found).length;
+  const r = $("ready"), n = ko().filter(k => found[k]).length;
   if (!files.length) { r.className = "ready no"; r.textContent = "Belum ada berkas. Data Order wajib ada."; }
   else if (!INSP) { r.className = "ready"; r.textContent = "Membaca berkas…"; }
   else if (Object.keys(dup).length) { r.className = "ready no"; r.textContent = "Ada tabel ganda. Hapus salah satu berkas."; }
   else if (!found.orders) { r.className = "ready no"; r.textContent = "Data Order belum ada, jadi pemeriksaan belum bisa jalan."; }
-  else { r.className = "ready ok"; r.textContent = n + " dari " + KORDER.length + " tabel terbaca." + (n < KORDER.length ? " Tambah tabel lain untuk membuka pemeriksaan tambahan." : " Semua pemeriksaan akan berjalan."); }
+  else { r.className = "ready ok"; r.textContent = n + " dari " + ko().length + " tabel terbaca." + (n < ko().length ? " Tambah tabel lain untuk membuka pemeriksaan tambahan." : " Semua pemeriksaan akan berjalan."); }
 }
 function showError(m) { const e = $("error"); e.textContent = m || ""; e.classList.toggle("hidden", !m); }
 
 async function run(url, fd) {
-  showError(""); $("loading").classList.remove("hidden"); $("go").disabled = $("sample").disabled = true;
-  fd.append("discount_limit", $("limit").value);
+  showError(""); fd.append("mode", MODE); $("loading").classList.remove("hidden"); $("go").disabled = $("sample").disabled = true;
   try {
     const r = await fetch(url, {method: "POST", body: fd});
     const d = await r.json().catch(() => ({}));
@@ -340,18 +401,44 @@ function table(cols, rows) {
 
 // ---- render all views
 function render() {
-  memo(); rank(); cases();
+  const order = D.mode === "order";
+  $("cTitle").textContent = order ? "Temuan di data order" : "Kasus yang perlu dilihat";
+  $("cLede").textContent = order ? "Satu kartu untuk tiap jenis masalah, diurutkan dari yang paling serius. Buka kartunya untuk membaca penjelasan, cara memverifikasi, dan baris data yang jadi buktinya." : "Satu kartu untuk tiap orang atau toko, diurutkan dari skor risiko tertinggi. Buka kartunya untuk membaca temuan, cara memverifikasi, dan buktinya.";
+  $("onlyHits").parentElement.classList.toggle("hidden", order);
+  memo(); if (!order) rank(); cases();
   document.querySelectorAll("#tabs button").forEach(b => b.disabled = false);
+  document.querySelector('#tabs [data-v="cmp"]').classList.toggle("hidden", order);
   $("nCases").textContent = D.findings.length;
   const dl = $("dl"); dl.href = "/api/report/" + D.job_id + ".xlsx"; dl.removeAttribute("aria-disabled");
   $("cmd").classList.remove("hidden"); setMin(innerWidth < 700); assistant();
 }
 
+function memoOrder() {
+  const k = D.kpi, sv = k.severity, m = D.meta, fs = D.findings, rows = fs.reduce((a, f) => a + f.evidence_count, 0);
+  $("mPill").textContent = "Audit Data Order";
+  $("mTitle").textContent = fs.length ? fs.length + " jenis masalah perlu dicek di data order" : "Data order terlihat bersih";
+  const row = (a, b) => [el("dt", {text: a}), el("dd", {text: b})];
+  $("mHead").replaceChildren(...row("PERIHAL", "Audit kewajaran data order"), ...row("PERIODE", m.date_from + " sampai " + m.date_to), ...row("CAKUPAN", fmt(m.n_orders) + " order, " + m.n_stores + " toko"));
+  const body = $("mBody"); body.replaceChildren();
+  if (!fs.length) body.append(el("p", {text: "Tidak ada pola yang melewati ambang pemeriksaan. Ini bukan jaminan data bebas masalah: pemeriksaan hanya menangkap pola yang cukup jelas, dan hanya pada tabel yang Anda unggah."}));
+  else {
+    body.append(el("p", {}, "Pemeriksaan menemukan ", N(sv.Tinggi + " temuan tingkat tinggi"), ...(sv.Sedang + sv.Rendah ? [" dan ", N(sv.Sedang + sv.Rendah + " lainnya")] : []), ", dengan ", N(fmt(rows) + " baris bukti"), ". Temuan ini adalah petunjuk untuk dicek ke dokumen aslinya, bukan kesimpulan bahwa ada kecurangan."));
+    fs.slice(0, 6).forEach(f => body.append(el("p", {}, el("b", {text: RL[f.rule] || f.rule}), ": " + f.title + ".")));
+    const steps = []; fs.slice(0, 5).forEach(f => { if (f.steps[0] && !steps.includes(f.steps[0])) steps.push(f.steps[0]); });
+    if (steps.length) body.append(el("h3", {text: "Yang sebaiknya dikerjakan lebih dulu"}), el("ol", {class: "actions"}, ...steps.map(x => el("li", {text: x}))));
+  }
+  const names = {orders: "Order", items: "Item", refunds: "Refund", cash: "Kas", employees: "Karyawan", stores: "Toko", skus: "SKU", opname: "Opname"};
+  const t = (v, l) => el("div", {class: "tally"}, el("b", {text: v}), el("span", {text: l}));
+  $("mSide").replaceChildren(t(String(sv.Tinggi), "temuan tinggi"), t(String(sv.Sedang + sv.Rendah), "temuan sedang dan rendah"), t(fmt(rows), "baris bukti"),
+    el("div", {class: "label", text: "DATA DIBACA"}), el("p", {class: "small", text: Object.keys(D.detected_files).map(x => names[x]).join(", ")}), ...(m.warnings || []).map(w => el("div", {class: "warn", text: w})));
+}
 function memo() {
+  if (D.mode === "order") return memoOrder();
+  $("mPill").textContent = "Audit Kasir";
   const k = D.kpi, sv = k.severity, m = D.meta, hi = D.risk.filter(r => r.level === "Tinggi");
   $("mTitle").textContent = hi.length ? hi.length + " dari " + m.n_cashiers + " kasir menunjukkan pola yang perlu ditelusuri" : "Tidak ada kasir dengan pola berisiko tinggi";
   const row = (a, b) => [el("dt", {text: a}), el("dd", {text: b})];
-  $("mHead").replaceChildren(...row("PERIHAL", "Hasil pemeriksaan transaksi toko"), ...row("PERIODE", m.date_from + " sampai " + m.date_to), ...row("CAKUPAN", fmt(m.n_orders) + " order, " + m.n_stores + " toko, " + m.n_cashiers + " kasir"));
+  $("mHead").replaceChildren(...row("PERIHAL", "Audit perilaku kasir"), ...row("PERIODE", m.date_from + " sampai " + m.date_to), ...row("CAKUPAN", fmt(m.n_orders) + " order, " + m.n_stores + " toko, " + m.n_cashiers + " kasir"));
   const body = $("mBody"); body.replaceChildren();
   body.append(el("p", {}, "Pemeriksaan menghasilkan ", N(sv.Tinggi + " temuan tingkat tinggi"), " dan ", N(sv.Sedang + sv.Rendah + " lainnya"), ", dengan nilai terkait sekitar ", N(rpShort(k.amount)), ". Temuan ini adalah petunjuk untuk ditelusuri, bukan kesimpulan bahwa ada kecurangan."));
   const byC = {}; D.findings.forEach(f => { if (f.subject_type === "cashier") (byC[f.subject] = byC[f.subject] || []).push(f); });
@@ -388,6 +475,12 @@ function rank() {
 
 // ---- cases
 function groups() {
+  if (D.mode === "order") {
+    const r = new Map();
+    D.findings.forEach(f => { if (!r.has(f.rule)) r.set(f.rule, {id: "", name: RL[f.rule] || f.rule, sub: "", risk: 0, level: "Rendah", fs: [], rows: 0, type: "rule"}); const x = r.get(f.rule); x.fs.push(f); x.risk = Math.max(x.risk, f.score); x.rows += f.evidence_count; });
+    r.forEach(x => { x.level = x.risk >= 70 ? "Tinggi" : x.risk >= 40 ? "Sedang" : "Rendah"; x.sub = fmt(x.rows) + " baris bukti"; });
+    return [...r.values()].sort((a, b) => b.risk - a.risk);
+  }
   const g = new Map(); D.risk.forEach(r => g.set(r.cashier_id, {id: r.cashier_id, name: r.nama, sub: r.store, risk: r.risk, level: r.level, orders: r.orders, fs: [], type: "cashier"}));
   D.findings.forEach(f => { if (f.subject_type === "cashier") g.get(f.subject)?.fs.push(f); else { const k = "x:" + f.subject; if (!g.has(k)) g.set(k, {id: f.subject_type === "store" ? "TOKO" : "DATA", name: f.subject_name, sub: f.subject_type === "store" ? "Temuan tingkat toko" : "Konsistensi data", risk: f.score, level: f.severity, fs: [], type: f.subject_type}); g.get(k).fs.push(f); } });
   return [...g.values()].sort((a, b) => b.risk - a.risk);
@@ -397,9 +490,9 @@ function cases() {
     const only = $("onlyHits").checked, gs = groups().filter(g => !only || g.fs.length);
     $("cases").replaceChildren(...gs.map(g => {
       const cls = g.level === "Tinggi" ? "hi" : g.level === "Sedang" ? "mid" : g.fs.length ? "" : "ok";
-      const ini = g.name.split(/\s+/).filter(w => /^[\p{L}\p{N}]/u.test(w)).slice(0, 2).map(w => w[0]).join("").toUpperCase();
+      const ini = g.type === "rule" ? "!" : g.name.split(/\s+/).filter(w => /^[\p{L}\p{N}]/u.test(w)).slice(0, 2).map(w => w[0]).join("").toUpperCase();
       const f = el("button", {class: "folder " + cls, type: "button"},
-        el("div", {class: "top"}, el("span", {class: "av", "aria-hidden": "true", text: ini}), el("div", {}, el("div", {class: "nm", text: g.name}), el("div", {class: "st", text: g.sub})), el("span", {class: "fid2", text: g.id})),
+        el("div", {class: "top"}, el("span", {class: "av", "aria-hidden": "true", text: ini}), el("div", {}, el("div", {class: "nm", text: g.name}), el("div", {class: "st", text: g.sub})), g.id ? el("span", {class: "fid2", text: g.id}) : null),
         el("div", {class: "sc"}, el("b", {text: String(g.risk)}), el("span", {class: "chip " + g.level, text: g.level.toUpperCase()})),
         el("div", {class: "tags", text: g.fs.length ? g.fs.length + " temuan: " + [...new Set(g.fs.map(x => x.rule.replaceAll("_", " ")))].slice(0, 3).join(", ") : "Tidak ada temuan"}));
       f.onclick = () => openGroup(g); return f;
@@ -409,7 +502,7 @@ function cases() {
 }
 function openCase(cashierId) { const g = groups().find(x => x.id === cashierId); if (g) { show("cases"); openGroup(g); } }
 function openGroup(g) {
-  $("dlgHead").replaceChildren(el("div", {class: "label", text: "BERKAS " + g.id}), el("h2", {id: "dlgT", text: g.name, style: "margin:2px 0 0"}), el("div", {class: "small", text: g.sub + (g.orders ? " · " + fmt(g.orders) + " order" : "") + " · skor risiko " + g.risk}));
+  $("dlgHead").replaceChildren(el("div", {class: "label", text: g.type === "rule" ? "JENIS PEMERIKSAAN" : "BERKAS " + g.id}), el("h2", {id: "dlgT", text: g.name, style: "margin:2px 0 0"}), el("div", {class: "small", text: g.sub + (g.orders ? " · " + fmt(g.orders) + " order" : "") + (g.type === "rule" ? " · skor tertinggi " : " · skor risiko ") + g.risk}));
   $("dlgBody").replaceChildren(...(g.fs.length ? g.fs.map((f, i) => finding(f, i === 0)) : [el("p", {class: "small", text: "Tidak ada temuan untuk kasir ini. Angkanya berada dalam kisaran rekan kerjanya."})]));
   const d = $("dlg"); if (!d.open) d.showModal();
 }
@@ -431,9 +524,9 @@ $("dlg").addEventListener("click", e => { if (e.target === $("dlg")) $("dlg").cl
 
 // ---- assistant bar
 function assistant() {
-  const top = D.findings[0], tk = D.risk[0];
+  const top = D.findings[0], tk = D.mode === "order" ? null : D.risk[0];
   $("sg").replaceChildren(...["Ringkas hasilnya", top ? "Jelaskan temuan " + top.id : null, tk ? "Ceritakan " + tk.nama : null].filter(Boolean).map(t => { const b = el("button", {type: "button", text: t}); b.onclick = () => { $("q").value = t; ask_(); }; return b; }));
-  $("q").placeholder = D.assistant.enabled ? "Tanya apa saja tentang temuan ini" : "Misalnya: kenapa " + (tk ? tk.nama : "seorang kasir") + " masuk daftar? (mode standar)";
+  $("q").placeholder = D.assistant.enabled ? "Tanya apa saja tentang temuan ini" : D.mode === "order" ? "Misalnya: jelaskan " + (top ? top.id : "F001") + " (mode standar)" : "Misalnya: kenapa " + (tk ? tk.nama : "seorang kasir") + " masuk daftar? (mode standar)";
 }
 function md(target, text) {
   target.replaceChildren(); let ul = null;

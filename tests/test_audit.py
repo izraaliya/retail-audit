@@ -8,7 +8,7 @@ import pytest
 from fastapi.testclient import TestClient
 
 from app import agent
-from app.audit import DataError, detect_kind, run_audit
+from app.audit import DataError, RULE_AUDITS, detect_kind, run_audit, select
 from app.main import app
 
 S = Path(__file__).resolve().parent.parent / "sample_data"
@@ -50,7 +50,7 @@ def test_planted_cashiers_found_without_false_positives(res):
 
 def test_each_scheme_maps_to_its_rule(res):
     got = {(f["subject"], f["rule"]) for f in res["findings"]}
-    for c, rule in [("K02", "refund_disetujui_sendiri"), ("K05", "diskon_tanpa_persetujuan"), ("K08", "selisih_kas"), ("K11", "luar_jam_buka"),
+    for c, rule in [("K02", "refund_disetujui_sendiri"), ("K05", "diskon_sering"), ("K08", "selisih_kas"), ("K11", "luar_jam_buka"),
                     ("K14", "struk_ganda"), ("K17", "refund_tanpa_order")]:
         assert (c, rule) in got, (c, rule)
     assert any(f["rule"] == "susut_stok" and "Malioboro" in f["subject"] for f in res["findings"])
@@ -156,7 +156,6 @@ def test_bad_uploads(tables):
     b = tables["orders"].to_csv(index=False).encode()
     r = client.post("/api/analyze", files=[("files", ("a.csv", b, "text/csv")), ("files", ("b.csv", b, "text/csv"))])
     assert r.status_code == 422 and "dua sumber" in r.json()["detail"].lower()
-    assert client.post("/api/analyze/sample", data={"discount_limit": "1"}).status_code == 422
     assert client.post("/api/analyze", files=[("files", ("c.csv", tables["refunds"].to_csv(index=False).encode(), "text/csv"))]).status_code == 422
 
 
@@ -283,3 +282,66 @@ def test_gemini_unreachable_reports_cause(res, monkeypatch):
     monkeypatch.setattr(agent.urllib.request, "urlopen", lambda req, timeout: (_ for _ in ()).throw(urllib.error.URLError("dns")))
     a = agent.ask(res, "ringkas")
     assert a["source"] == "aturan" and "Gemini tidak terjangkau" in a["answer"]
+
+
+# ---------------------------------------------------------------- two audits: cashier behaviour vs order data
+def test_every_rule_belongs_to_an_audit_and_select_filters(res):
+    assert {f["rule"] for f in res["findings"]} <= set(RULE_AUDITS)
+    k, o = select(res, "kasir"), select(res, "order")
+    assert all("kasir" in f["audits"] for f in k["findings"]) and all("order" in f["audits"] for f in o["findings"])
+    assert not any(f["rule"] == "integritas_data" for f in k["findings"]) and any(f["rule"] == "integritas_data" for f in o["findings"])
+    assert not any(f["rule"] == "diskon_sering" for f in o["findings"])
+    for v in (k, o):
+        assert [f["id"] for f in v["findings"]] == [f"F{i:03d}" for i in range(1, len(v["findings"]) + 1)]
+    assert set(k["risk"][k["risk"].level == "Tinggi"].cashier_id) == PLANTED
+    assert set(o["risk"][o["risk"].level == "Tinggi"].cashier_id) <= {"K14", "K17"}
+    with pytest.raises(DataError):
+        select(res, "lainnya")
+
+
+def test_clean_sample_has_no_false_order_data_findings(res):
+    new_rules = {"id_ganda", "angka_mustahil", "nilai_tidak_wajar", "harga_tidak_cocok", "refund_melebihi_order"}
+    assert not new_rules & {f["rule"] for f in res["findings"]}
+
+
+def test_order_audit_catches_planted_data_errors(tables):
+    t = {k: v.copy() for k, v in tables.items()}
+    o = t["orders"].reset_index(drop=True)
+    o.loc[10, "total"] = -50000
+    o.loc[11, "discount"] = o.loc[11, "subtotal"] + 5000
+    o.loc[12, ["total", "subtotal"]] = o.total.median() * 200
+    o.loc[12, "voided"] = 0
+    t["orders"] = pd.concat([o, o.iloc[[5]]], ignore_index=True)
+    it = t["items"].reset_index(drop=True)
+    sku = it.sku.iloc[0]
+    it.loc[it.sku == sku, "unit_price"] = it.loc[it.sku == sku, "unit_price"] * 1.5
+    t["items"] = it
+    rf = t["refunds"].reset_index(drop=True)
+    row = rf[rf.order_id.isin(o.order_id)].index[0]
+    rf.loc[row, "amount"] = float(o.set_index("order_id").subtotal[rf.loc[row, "order_id"]]) * 3 + 10000
+    t["refunds"] = rf
+    r = select(run_audit(t), "order")
+    got = {f["rule"]: f for f in r["findings"]}
+    for rule in ("id_ganda", "angka_mustahil", "nilai_tidak_wajar", "harga_tidak_cocok", "refund_melebihi_order"):
+        assert rule in got, rule
+        assert got[rule]["evidence_count"] >= 1 and got[rule]["subject_type"] == "data"
+    assert {e["alasan"] for e in got["angka_mustahil"]["evidence"]} == {"ada nilai negatif", "diskon lebih besar dari subtotal"}
+    assert got["id_ganda"]["evidence_count"] == 2
+    assert all(e["sku"] == sku for e in got["harga_tidak_cocok"]["evidence"])
+
+
+def test_order_audit_api_and_report(monkeypatch):
+    monkeypatch.setattr(agent, "enabled", lambda: False)
+    k = client.post("/api/analyze/sample").json()
+    assert k["mode"] == "kasir" and all("kasir" in f["audits"] for f in k["findings"])
+    r = client.post("/api/analyze/sample", data={"mode": "order"})
+    o = r.json()
+    assert r.status_code == 200 and o["mode"] == "order" and o["findings"] and all("order" in f["audits"] for f in o["findings"])
+    assert all(f["steps"] for f in o["findings"])
+    dl = client.get(f"/api/report/{o['job_id']}.xlsx")
+    assert dl.status_code == 200 and "Data_Order" in dl.headers["content-disposition"]
+    assert "Data_Order" not in client.get(f"/api/report/{k['job_id']}.xlsx").headers["content-disposition"]
+    a = client.post("/api/ask", json={"job_id": o["job_id"], "question": "jelaskan F001"}).json()
+    assert a["source"] == "aturan" and "F001" in a["answer"]
+    bad = client.post("/api/analyze/sample", data={"mode": "xyz"})
+    assert bad.status_code == 422 and "audit" in bad.json()["detail"].lower()

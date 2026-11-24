@@ -54,7 +54,7 @@ mgr = employees[employees.peran == "Manajer"].set_index("store_id").employee_id.
 # ---- planted behaviour (cashier -> scheme). Rates are per order unless stated.
 BAD = {
     "K02": {"refund_abuse": 0.050, "self_approve": 0.60, "label": "Refund berlebihan dan disetujui sendiri"},
-    "K05": {"discount_abuse": 0.30, "just_below": True, "label": "Diskon berlebihan, banyak tepat di bawah batas persetujuan"},
+    "K05": {"discount_abuse": 0.30, "just_below": True, "label": "Diskon berlebihan pada banyak order"},
     "K08": {"cash_short": True, "label": "Kas selalu kurang saat shift sore"},
     "K11": {"offhours": 0.045, "void": 0.07, "label": "Transaksi di luar jam buka dan void tinggi"},
     "K14": {"dup": 0.03, "label": "Struk ganda berturutan"},
